@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" width="100%" height="100%">
+  <!-- A sophisticated premium placeholder logo -->
+  <rect width="400" height="80" fill="transparent" />
+  <text x="20" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="bold" fill="#D4AF37" letter-spacing="2">LONG ISLAND</text>
+  <text x="215" y="50" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="300" fill="#E2E8F0" letter-spacing="1">COLLECTORS CO.</text>
+  <line x1="20" y1="60" x2="380" y2="60" stroke="#D4AF37" stroke-width="1" opacity="0.5" />
+</svg>
