@@ -1,8 +1,16 @@
 import { motion } from 'framer-motion';
 import data from '../data.json';
 
+interface VaultItem {
+  id: string;
+  title: string;
+  price: string;
+  image: string;
+  url: string;
+}
+
 const Vault = () => {
-  const items = data.vault;
+  const items = data.vault as VaultItem[];
 
   return (
     <section id="vault" className="py-24 px-4 bg-navy">

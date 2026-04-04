@@ -33,7 +33,7 @@ const Navbar = () => {
             <a href={data.livestream.url} target="_blank" rel="noreferrer" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
               Our eBay Store
             </a>
-            <a href="#sell" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
+            <a href="mailto:info@licollectorsco.com" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
               Contact
             </a>
           </div>
@@ -80,7 +80,7 @@ const Navbar = () => {
             </a>
             <a 
               onClick={() => setIsMenuOpen(false)} 
-              href="#sell" 
+              href="mailto:info@licollectorsco.com" 
               className="block text-center text-gray-300 hover:text-gold py-3 text-lg uppercase"
             >
               Contact

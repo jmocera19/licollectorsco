@@ -3,6 +3,7 @@ import Hero from './components/Hero';
 import SellCollection from './components/SellCollection';
 import Vault from './components/Vault';
 import GradingInfo from './components/GradingInfo';
+import AboutUs from './components/AboutUs';
 import { motion, useScroll, useSpring } from 'framer-motion';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 
@@ -38,11 +39,15 @@ function App() {
         <SellCollection />
         <Vault />
         <GradingInfo />
+        <AboutUs />
       </main>
       
-      <footer className="bg-[#050c18] border-t border-gold/20 py-8 text-center text-gray-400">
-        <p>© {new Date().getFullYear()} Long Island Collectors Co. All rights reserved.</p>
-        </footer>
+      <footer className="bg-[#050c18] border-t border-gold/20 py-10 text-center flex flex-col items-center gap-4">
+        <a href="mailto:info@licollectorsco.com" className="text-gold hover:text-white font-medium tracking-wide transition-colors duration-300">
+          info@licollectorsco.com
+        </a>
+        <p className="text-gray-500 font-light text-sm">© {new Date().getFullYear()} Long Island Collectors Co. All rights reserved.</p>
+      </footer>
       </div>
     </HelmetProvider>
   );
