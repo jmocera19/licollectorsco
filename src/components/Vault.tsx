@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import ReactGA from 'react-ga4';
 import data from '../data.json';
 
 interface VaultItem {
@@ -85,6 +86,13 @@ const Vault = () => {
                     href={item.url} 
                     target="_blank" 
                     rel="noreferrer" 
+                    onClick={() => {
+                      ReactGA.event({
+                        category: "Vault",
+                        action: "view_ebay_item",
+                        label: item.title
+                      });
+                    }}
                     className="block w-full py-3 text-center bg-gold text-navy font-bold rounded shadow-gold-glow hover:bg-yellow-500 hover:scale-105 transition-all"
                   >
                     View on eBay
