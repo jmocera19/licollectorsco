@@ -14,7 +14,7 @@ const Hero = () => {
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
         <motion.h1 
-          className="text-5xl md:text-7xl font-['Inter'] font-bold text-white mb-6 tracking-wide"
+          className="text-5xl md:text-7xl font-['Inter'] font-extrabold text-white mb-6 tracking-wide"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
@@ -32,7 +32,7 @@ const Hero = () => {
         </motion.p>
         
         <motion.div 
-          className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6"
+          className="flex flex-col sm:flex-row justify-center gap-6 sm:gap-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.6 }}
