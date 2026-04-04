@@ -6,8 +6,15 @@ import GradingInfo from './components/GradingInfo';
 import AboutUs from './components/AboutUs';
 import { motion, useScroll, useSpring } from 'framer-motion';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
+import { initGA, useAnalytics } from './utils/useAnalytics';
+
+// Initialize the GA layer once at root
+initGA();
 
 function App() {
+  // Fire page_views tracking internally
+  useAnalytics();
+
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
