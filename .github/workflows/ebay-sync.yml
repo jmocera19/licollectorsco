@@ -21,10 +21,13 @@ jobs:
         # Add your live eBay IDs here separated by a space!
         run: node scripts/add-to-vault.js 145698305710
 
-      - name: Commit and Push Overwitten JSON
+      - name: Compile Automated Sitemap
+        run: node scripts/generate-sitemap.js
+
+      - name: Commit and Push Overwitten JSON and Arrays
         run: |
           git config --global user.name 'eBay GitHub Action Auto-Sync'
           git config --global user.email 'automation@licollectorsco.com'
-          git add src/data.json
+          git add src/data.json public/sitemap.xml
           # Check if git diff picked up any data string modifications and push if so!
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-synced vault with active eBay listing arrays" && git push)
