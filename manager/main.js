@@ -75,7 +75,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => {
 ipcMain.handle('sync-live', async () => {
   return new Promise((resolve) => {
     const dateStr = new Date().toISOString().split('T')[0];
-    const command = `git add . && git commit -m "Vault Update: ${dateStr}" && git push origin main`;
+    const command = `node scripts/generate-sitemap.js && git add . && git commit -m "Vault Update: ${dateStr}" && git push origin main`;
     
     exec(command, { cwd: cwdPath }, (error, stdout, stderr) => {
       if (error) {
