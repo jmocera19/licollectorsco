@@ -71,6 +71,13 @@ async function run() {
 
   // Rewrite entire blob structure globally after all IDs are validated
   fs.writeFileSync(dataPath, JSON.stringify(dataContent, null, 2));
+
+  const stats = fs.statSync(dataPath);
+  if (stats.size > 500 * 1024) {
+    console.warn(`\n⚠️  WARNING: src/data.json is approaching heavy capacities (${(stats.size / 1024).toFixed(2)} KB).`);
+    console.warn('Consider migrating to a hosted database architecture to guarantee strict frontend hydration speeds.');
+  }
+
   console.log('\n--- BATCH SYNC SUCCESS! ---');
   console.log('✅ src/data.json is rewritten with fresh logic constraints.');
 }
