@@ -15,7 +15,7 @@ const Navbar = () => {
           {/* Logo Container */}
           <div className="flex-shrink-0 flex items-center cursor-pointer mr-6 z-50">
             <a href="#" className="flex items-center gap-4">
-              <img src={logo} alt="Logo" className="h-16 md:h-14 w-auto object-contain drop-shadow-[0_0_15px_rgba(212,175,55,0.2)]" />
+              <img src={logo} alt="Logo" className="h-10 md:h-12 w-auto object-contain drop-shadow-[0_0_15px_rgba(212,175,55,0.2)]" />
               <span className="hidden sm:block text-gold text-xl md:text-2xl font-['Inter'] font-bold tracking-wider text-shadow-sm">
                 Long Island Collectors Co.
               </span>
