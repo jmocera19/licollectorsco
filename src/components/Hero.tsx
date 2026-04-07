@@ -2,7 +2,16 @@ import { motion } from 'framer-motion';
 
 const Hero = () => {
   return (
-    <section className="relative min-h-[80vh] flex flex-col justify-center items-center text-center px-4 overflow-hidden">
+    <section 
+      className="relative min-h-[80vh] flex flex-col justify-center items-center text-center px-4 overflow-hidden"
+      style={{
+        background: `
+          radial-gradient(ellipse at 70% 50%, rgba(212,175,55,0.08) 0%, transparent 60%),
+          radial-gradient(ellipse at 30% 80%, rgba(212,175,55,0.05) 0%, transparent 50%),
+          linear-gradient(135deg, #0A192F 0%, #0d2137 50%, #0A192F 100%)
+        `
+      }}
+    >
       {/* Background overlay/fx */}
       <div className="absolute inset-0 bg-navy bg-opacity-80 z-0"></div>
       <div className="absolute inset-0 bg-gradient-to-t from-navy to-transparent z-0"></div>
