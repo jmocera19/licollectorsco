@@ -79,7 +79,6 @@ ipcMain.handle('sync-live', async () => {
     
     exec(command, { cwd: cwdPath }, (error, stdout, stderr) => {
       if (error) {
-        // Typically happens if there's nothing to commit. We handle it safely.
         resolve({ success: false, error: error.message, stdout, stderr });
       } else {
         resolve({ success: true, stdout });
@@ -87,3 +86,45 @@ ipcMain.handle('sync-live', async () => {
     });
   });
 });
+
+// --- IPC: Read All Blog Posts ---
+ipcMain.handle('read-posts', async () => {
+  try {
+    const postsPath = path.join(__dirname, '../src/posts.json');
+    const raw = fs.readFileSync(postsPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    return { posts: [], error: err.message };
+  }
+});
+
+// --- IPC: Publish New Blog Post ---
+ipcMain.handle('publish-post', async (event, post) => {
+  try {
+    const postsPath = path.join(__dirname, '../src/posts.json');
+    const raw = fs.readFileSync(postsPath, 'utf8');
+    const data = JSON.parse(raw);
+    // Remove any existing post with same slug (edit use case)
+    data.posts = data.posts.filter(p => p.slug !== post.slug);
+    data.posts.unshift(post); // newest first
+    fs.writeFileSync(postsPath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// --- IPC: Delete Blog Post ---
+ipcMain.handle('delete-post', async (event, slug) => {
+  try {
+    const postsPath = path.join(__dirname, '../src/posts.json');
+    const raw = fs.readFileSync(postsPath, 'utf8');
+    const data = JSON.parse(raw);
+    data.posts = data.posts.filter(p => p.slug !== slug);
+    fs.writeFileSync(postsPath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+

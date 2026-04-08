@@ -1,15 +1,40 @@
+import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import SellCollection from './components/SellCollection';
 import Vault from './components/Vault';
 import GradingInfo from './components/GradingInfo';
 import AboutUs from './components/AboutUs';
+import BlogIndex from './pages/BlogIndex';
+import BlogPost from './pages/BlogPost';
 import { motion, useScroll, useSpring } from 'framer-motion';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { initGA, useAnalytics } from './utils/useAnalytics';
 
 // Initialize the GA layer once at root
 initGA();
+
+const HomePage = () => (
+  <>
+    <Helmet>
+      <title>Long Island Collectors Co. | We Buy & Sell Pokémon & Funko</title>
+      <meta name="description" content="The premier destination for high-end graded Pokémon slabs and Funko Pops. Sell your collection to us for top dollar." />
+      <meta property="og:title" content="Long Island Collectors Co. | We Buy & Sell Pokémon & Funko" />
+      <meta property="og:description" content="The premier destination for high-end graded Pokémon slabs and Funko Pops. Sell your collection to us for top dollar." />
+      <meta property="og:image" content="https://www.licollectorsco.com/assets/LogoSVG.svg" />
+      <meta property="og:url" content="https://www.licollectorsco.com" />
+      <meta property="og:type" content="website" />
+      <meta name="twitter:card" content="summary_large_image" />
+    </Helmet>
+    <main className="space-y-4">
+      <Hero />
+      <SellCollection />
+      <Vault />
+      <GradingInfo />
+      <AboutUs />
+    </main>
+  </>
+);
 
 function App() {
   // Fire page_views tracking internally
@@ -24,30 +49,18 @@ function App() {
 
   return (
     <HelmetProvider>
-      <Helmet>
-        <title>Long Island Collectors Co. | We Buy & Sell Pokémon & Funko</title>
-        <meta name="description" content="The premier destination for high-end graded Pokémon slabs and Funko Pops. Sell your collection to us for top dollar." />
-        <meta property="og:title" content="Long Island Collectors Co. | We Buy & Sell Pokémon & Funko" />
-        <meta property="og:description" content="The premier destination for high-end graded Pokémon slabs and Funko Pops. Sell your collection to us for top dollar." />
-        <meta property="og:image" content="https://www.licollectorsco.com/assets/LogoSVG.svg" />
-        <meta property="og:url" content="https://www.licollectorsco.com" />
-        <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary_large_image" />
-      </Helmet>
-      
       <div className="min-h-screen bg-navy selection:bg-gold selection:text-navy font-sans">
         <motion.div
         className="fixed top-0 left-0 right-0 h-1 bg-gold z-50 origin-left"
         style={{ scaleX }}
       />
       <Navbar />
-      <main className="space-y-4">
-        <Hero />
-        <SellCollection />
-        <Vault />
-        <GradingInfo />
-        <AboutUs />
-      </main>
+      
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/blog" element={<BlogIndex />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
+      </Routes>
       
       <footer className="bg-[#050c18] border-t border-gold/20 py-10 text-center flex flex-col items-center gap-4">
         {/* Social Links */}

@@ -1,4 +1,29 @@
-// DOM Elements
+// =============================================
+// TAB SWITCHING
+// =============================================
+function switchTab(tab) {
+  const panels = ['inventory', 'blog'];
+  panels.forEach(p => {
+    const panel = document.getElementById(`panel-${p}`);
+    const btn = document.getElementById(`tab-${p}`);
+    if (p === tab) {
+      panel.classList.remove('hidden');
+      panel.classList.add('flex');
+      btn.classList.add('text-gold', 'border-gold');
+      btn.classList.remove('text-gray-400', 'border-transparent');
+    } else {
+      panel.classList.add('hidden');
+      panel.classList.remove('flex');
+      btn.classList.remove('text-gold', 'border-gold');
+      btn.classList.add('text-gray-400', 'border-transparent');
+    }
+  });
+  if (tab === 'blog') refreshBlogPosts();
+}
+
+// =============================================
+// INVENTORY PANEL
+// =============================================
 const vaultGrid = document.getElementById('vault-grid');
 const addBtn = document.getElementById('add-btn');
 const ebayInput = document.getElementById('ebay-input');
@@ -19,7 +44,6 @@ const escapeHTML = (str) => {
   );
 }
 
-// Global Core Loader
 async function refreshVaultData() {
   const data = await window.api.readVault();
   const items = data.vault || [];
@@ -34,8 +58,6 @@ async function refreshVaultData() {
   items.forEach(item => {
     const card = document.createElement('div');
     card.className = "flex justify-between items-center bg-navy border border-gold/10 p-4 rounded-lg shadow hover:border-gold/30 transition-colors";
-    
-    // Natively injecting HTML fragments securely. Image fallback mapped natively!
     card.innerHTML = `
       <div class="flex items-center gap-6 overflow-hidden">
         <div class="w-16 h-16 bg-black rounded flex-shrink-0 flex items-center justify-center overflow-hidden border border-gold/20">
@@ -57,7 +79,6 @@ async function refreshVaultData() {
   });
 }
 
-// Global scope window router for the inline onClick commands to operate outside closure restrictions
 window.handleRemove = async (id) => {
   const attempt = await window.api.removeVaultItem(id);
   if (attempt.success) {
@@ -84,7 +105,7 @@ addBtn.addEventListener('click', async () => {
     addStatus.classList.replace('text-red-500', 'text-green-500');
     if (!addStatus.classList.contains('text-green-500')) { addStatus.classList.add('text-green-500'); addStatus.classList.remove('text-gold'); }
     ebayInput.value = '';
-    refreshVaultData(); // Update screen!
+    refreshVaultData();
   } else {
     addStatus.innerText = "Error: See Console";
     addStatus.classList.replace('text-green-500', 'text-red-500');
@@ -97,7 +118,6 @@ addBtn.addEventListener('click', async () => {
   addBtn.classList.add('bg-gold');
   addBtn.classList.remove('bg-gray-500');
 
-  // Fade out message
   setTimeout(() => { addStatus.innerText = ''; addStatus.className="text-sm font-medium text-gold ml-4"; }, 4000);
 });
 
@@ -115,7 +135,6 @@ syncBtn.addEventListener('click', async () => {
     syncStatus.className = "text-sm font-medium text-green-400";
     console.log("Git Push Stdout:", res.stdout);
   } else {
-    // If output says 'nothing to commit', print that explicitly
     if (res.stdout && res.stdout.includes('nothing to commit')) {
         syncStatus.innerText = "Already Up To Date.";
         syncStatus.className = "text-sm font-medium text-yellow-500";
@@ -134,5 +153,128 @@ syncBtn.addEventListener('click', async () => {
   setTimeout(() => { syncStatus.innerText = ''; }, 5000);
 });
 
-// Boot Action!
+// =============================================
+// BLOG EDITOR PANEL
+// =============================================
+const blogTitle = document.getElementById('blog-title');
+const blogSlug = document.getElementById('blog-slug');
+const blogTags = document.getElementById('blog-tags');
+const blogExcerpt = document.getElementById('blog-excerpt');
+const blogBody = document.getElementById('blog-body');
+const blogPublishBtn = document.getElementById('blog-publish-btn');
+const blogClearBtn = document.getElementById('blog-clear-btn');
+const blogStatus = document.getElementById('blog-status');
+const blogPostsList = document.getElementById('blog-posts-list');
+
+// Auto-slugify title → slug field
+blogTitle.addEventListener('input', () => {
+  const raw = blogTitle.value;
+  const slug = raw
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+  blogSlug.value = slug;
+});
+
+// Publish / save post
+blogPublishBtn.addEventListener('click', async () => {
+  const title = blogTitle.value.trim();
+  const slug = blogSlug.value.trim();
+  const excerpt = blogExcerpt.value.trim();
+  const body = blogBody.value.trim();
+
+  if (!title || !slug || !excerpt || !body) {
+    blogStatus.innerText = 'Title, slug, excerpt, and body are required.';
+    blogStatus.className = 'text-sm font-medium text-red-400';
+    setTimeout(() => { blogStatus.innerText = ''; }, 4000);
+    return;
+  }
+
+  const tags = blogTags.value
+    .split(',')
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+
+  const post = {
+    id: slug,
+    slug,
+    title,
+    date: new Date().toISOString().split('T')[0],
+    tags,
+    excerpt,
+    body
+  };
+
+  blogPublishBtn.disabled = true;
+  blogPublishBtn.innerText = 'Publishing...';
+
+  const res = await window.api.publishPost(post);
+
+  if (res.success) {
+    blogStatus.innerText = '✅ Post published!';
+    blogStatus.className = 'text-sm font-medium text-green-400';
+    clearBlogForm();
+    refreshBlogPosts();
+  } else {
+    blogStatus.innerText = `Error: ${res.error}`;
+    blogStatus.className = 'text-sm font-medium text-red-400';
+  }
+
+  blogPublishBtn.disabled = false;
+  blogPublishBtn.innerText = 'Publish Post';
+  setTimeout(() => { blogStatus.innerText = ''; }, 5000);
+});
+
+blogClearBtn.addEventListener('click', clearBlogForm);
+
+function clearBlogForm() {
+  blogTitle.value = '';
+  blogSlug.value = '';
+  blogTags.value = '';
+  blogExcerpt.value = '';
+  blogBody.value = '';
+}
+
+async function refreshBlogPosts() {
+  const data = await window.api.readPosts();
+  const posts = data.posts || [];
+
+  blogPostsList.innerHTML = '';
+
+  if (posts.length === 0) {
+    blogPostsList.innerHTML = '<p class="text-gray-500 italic text-center py-6">No posts yet.</p>';
+    return;
+  }
+
+  posts.forEach(post => {
+    const row = document.createElement('div');
+    row.className = 'flex justify-between items-center bg-navy border border-gold/10 p-4 rounded-lg hover:border-gold/30 transition-colors';
+    row.innerHTML = `
+      <div class="flex flex-col overflow-hidden pr-4">
+        <span class="font-bold text-gray-200 truncate text-sm">${escapeHTML(post.title)}</span>
+        <span class="text-xs text-gray-500 mt-0.5">${escapeHTML(post.date)} · ${(post.tags || []).map(t => escapeHTML(t)).join(', ')}</span>
+      </div>
+      <button onclick="handleDeletePost('${escapeHTML(post.slug)}')" class="bg-red-900/30 text-red-500 hover:bg-red-600 hover:text-white border border-red-500/50 py-1.5 px-4 rounded text-sm font-bold transition-colors flex-shrink-0">
+        Delete
+      </button>
+    `;
+    blogPostsList.appendChild(row);
+  });
+}
+
+window.handleDeletePost = async (slug) => {
+  if (!confirm(`Delete post "${slug}"? This cannot be undone.`)) return;
+  const res = await window.api.deletePost(slug);
+  if (res.success) {
+    refreshBlogPosts();
+  } else {
+    alert('Delete failed: ' + res.error);
+  }
+};
+
+// =============================================
+// BOOT
+// =============================================
 refreshVaultData();
