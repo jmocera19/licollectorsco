@@ -37,32 +37,107 @@
     </div>
   </header>
 
+  <!-- Tab Bar -->
+  <div class="flex border-b border-gold/20 bg-[#061020] flex-shrink-0">
+    <button id="tab-inventory" onclick="switchTab('inventory')" class="tab-btn active-tab px-8 py-3 text-sm font-bold uppercase tracking-wider text-gold border-b-2 border-gold transition-colors">
+      Inventory
+    </button>
+    <button id="tab-blog" onclick="switchTab('blog')" class="tab-btn px-8 py-3 text-sm font-bold uppercase tracking-wider text-gray-400 hover:text-gold border-b-2 border-transparent transition-colors">
+      Blog Editor
+    </button>
+  </div>
+
   <!-- Core Body View -->
-  <main class="flex-grow flex flex-col p-8 overflow-hidden gap-8">
-    <div class="flex justify-between items-end flex-shrink-0">
-      <div class="flex flex-col gap-2">
-        <label class="text-gold font-bold uppercase tracking-wider text-sm">Target eBay Setup</label>
-        <div class="flex gap-4">
-          <input 
-            id="ebay-input"
-            type="text" 
-            placeholder="Paste eBay Item ID..." 
-            class="bg-[#050c18] border border-gold/30 rounded px-4 py-2 w-72 focus:outline-none focus:border-gold shadow-inner"
-          />
-          <button id="add-btn" class="bg-gold text-navy hover:bg-yellow-500 font-bold py-2 px-6 rounded shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all">
-            Import Item
-          </button>
+  <main class="flex-grow flex flex-col overflow-hidden">
+
+    <!-- ====== INVENTORY PANEL ====== -->
+    <div id="panel-inventory" class="flex flex-col flex-grow p-8 overflow-hidden gap-8">
+      <div class="flex justify-between items-end flex-shrink-0">
+        <div class="flex flex-col gap-2">
+          <label class="text-gold font-bold uppercase tracking-wider text-sm">Target eBay Setup</label>
+          <div class="flex gap-4">
+            <input 
+              id="ebay-input"
+              type="text" 
+              placeholder="Paste eBay Item ID..." 
+              class="bg-[#050c18] border border-gold/30 rounded px-4 py-2 w-72 focus:outline-none focus:border-gold shadow-inner"
+            />
+            <button id="add-btn" class="bg-gold text-navy hover:bg-yellow-500 font-bold py-2 px-6 rounded shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all">
+              Import Item
+            </button>
+          </div>
+        </div>
+        <div id="add-status" class="text-sm font-medium text-gold ml-4"></div>
+      </div>
+
+      <!-- Active Vault Grid -->
+      <div class="bg-[#050c18] border border-gold/20 rounded-xl flex-grow p-6 overflow-y-auto flex flex-col shadow-inner">
+        <h2 class="text-xl font-bold mb-6 border-b border-gold/10 pb-4">Active Vault Database</h2>
+        <div id="vault-grid" class="flex flex-col gap-4">
+          <!-- Rendered purely via JS injections -->
         </div>
       </div>
-      <div id="add-status" class="text-sm font-medium text-gold ml-4"></div>
     </div>
 
-    <!-- Active Vault Grid -->
-    <div class="bg-[#050c18] border border-gold/20 rounded-xl flex-grow p-6 overflow-y-auto flex flex-col shadow-inner">
-      <h2 class="text-xl font-bold mb-6 border-b border-gold/10 pb-4">Active Vault Database</h2>
-      
-      <div id="vault-grid" class="flex flex-col gap-4">
-        <!-- Rendered purely via JS injections -->
+    <!-- ====== BLOG EDITOR PANEL ====== -->
+    <div id="panel-blog" class="hidden flex-col flex-grow p-8 overflow-y-auto gap-6">
+      <h2 class="text-xl font-bold border-b border-gold/10 pb-4 flex-shrink-0">Write a New Post</h2>
+
+      <!-- Form -->
+      <div class="grid grid-cols-1 gap-4 max-w-3xl">
+        <!-- Title -->
+        <div class="flex flex-col gap-1">
+          <label class="text-gold text-xs font-bold uppercase tracking-widest">Title</label>
+          <input id="blog-title" type="text" placeholder="e.g. Why PSA 10 Charizards Hold Their Value"
+            class="bg-[#050c18] border border-gold/30 rounded px-4 py-2 w-full focus:outline-none focus:border-gold shadow-inner" />
+        </div>
+
+        <!-- Slug (auto-generated) -->
+        <div class="flex flex-col gap-1">
+          <label class="text-gold text-xs font-bold uppercase tracking-widest">Slug <span class="text-gray-500 font-normal normal-case">(auto-generated, editable)</span></label>
+          <input id="blog-slug" type="text" placeholder="e.g. psa-10-charizard-value"
+            class="bg-[#050c18] border border-gold/30 rounded px-4 py-2 w-full focus:outline-none focus:border-gold shadow-inner font-mono text-sm" />
+        </div>
+
+        <!-- Tags -->
+        <div class="flex flex-col gap-1">
+          <label class="text-gold text-xs font-bold uppercase tracking-widest">Tags <span class="text-gray-500 font-normal normal-case">(comma-separated)</span></label>
+          <input id="blog-tags" type="text" placeholder="e.g. PSA, Charizard, Grading"
+            class="bg-[#050c18] border border-gold/30 rounded px-4 py-2 w-full focus:outline-none focus:border-gold shadow-inner" />
+        </div>
+
+        <!-- Excerpt -->
+        <div class="flex flex-col gap-1">
+          <label class="text-gold text-xs font-bold uppercase tracking-widest">Excerpt <span class="text-gray-500 font-normal normal-case">(1-2 sentences for card preview)</span></label>
+          <input id="blog-excerpt" type="text" placeholder="Short summary..."
+            class="bg-[#050c18] border border-gold/30 rounded px-4 py-2 w-full focus:outline-none focus:border-gold shadow-inner" />
+        </div>
+
+        <!-- Body markdown -->
+        <div class="flex flex-col gap-1">
+          <label class="text-gold text-xs font-bold uppercase tracking-widest">Body <span class="text-gray-500 font-normal normal-case">(Markdown supported)</span></label>
+          <textarea id="blog-body" rows="18" placeholder="# Your post heading&#10;&#10;Write your content here in Markdown..."
+            class="bg-[#050c18] border border-gold/30 rounded px-4 py-3 w-full focus:outline-none focus:border-gold shadow-inner font-mono text-sm resize-y"></textarea>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-4">
+          <button id="blog-publish-btn" class="bg-gold text-navy hover:bg-yellow-500 font-bold py-2 px-8 rounded shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all">
+            Publish Post
+          </button>
+          <button id="blog-clear-btn" class="border border-gold/30 text-gray-400 hover:text-white hover:border-white font-bold py-2 px-6 rounded transition-all">
+            Clear Form
+          </button>
+          <span id="blog-status" class="text-sm font-medium text-gold"></span>
+        </div>
+      </div>
+
+      <!-- Published Posts List -->
+      <div class="bg-[#050c18] border border-gold/20 rounded-xl p-6 flex-shrink-0 max-w-3xl">
+        <h3 class="text-lg font-bold mb-4 border-b border-gold/10 pb-3">Published Posts</h3>
+        <div id="blog-posts-list" class="flex flex-col gap-3">
+          <!-- Rendered via JS -->
+        </div>
       </div>
     </div>
 

@@ -27,11 +27,14 @@ const Navbar = () => {
             <a href="#sell" className="text-navy bg-gold px-4 py-2 rounded-md hover:bg-yellow-500 shadow-gold-glow transition-all font-bold uppercase tracking-wide text-sm whitespace-nowrap">
               Sell to Us
             </a>
-            <a href="#vault" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap whitespace-nowrap">
+            <a href="#vault" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
               The Vault
             </a>
             <a href={data.livestream.url} target="_blank" rel="noreferrer" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
               Our eBay Store
+            </a>
+            <a href="/blog" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
+              Blog
             </a>
             <a href="mailto:info@licollectorsco.com" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
               Contact
@@ -77,6 +80,13 @@ const Navbar = () => {
               className="block text-center text-gray-300 hover:text-gold py-3 text-lg uppercase border-b border-gold/10"
             >
               Our eBay Store
+            </a>
+            <a 
+              onClick={() => setIsMenuOpen(false)} 
+              href="/blog" 
+              className="block text-center text-gray-300 hover:text-gold py-3 text-lg uppercase border-b border-gold/10"
+            >
+              Blog
             </a>
             <a 
               onClick={() => setIsMenuOpen(false)} 
