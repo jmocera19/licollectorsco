@@ -33,7 +33,7 @@ const StreamBanner = () => {
             Join the stream
           </a>
         </div>
-        <button onClick={() => setIsVisible(false)} className="text-navy hover:text-white transition-colors">
+        <button onClick={() => setIsVisible(false)} aria-label="Dismiss banner" className="text-navy hover:text-white transition-colors">
           <X size={20} />
         </button>
       </motion.div>
