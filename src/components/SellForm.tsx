@@ -15,13 +15,13 @@ const SellForm = () => {
   }, []);
 
   return (
-    <div className="w-full overflow-y-auto max-h-[80vh]">
+    <div className="w-full min-h-[600px] flex justify-center items-center">
       <div 
         data-youform-embed 
         data-form="fhxswrga" 
         data-base-url="https://app.youform.com" 
         data-width="100%"
-        data-height="100%"
+        data-height="700"
         className="w-full"
       ></div>
     </div>
