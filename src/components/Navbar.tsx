@@ -1,5 +1,6 @@
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 // @ts-ignore
 import logo from '../assets/LogoSVG.svg';
 import data from '../data.json';
@@ -14,20 +15,20 @@ const Navbar = () => {
           
           {/* Logo Container */}
           <div className="flex-shrink-0 flex items-center cursor-pointer mr-6 z-50">
-            <a href="#" className="flex items-center gap-4">
+            <Link to="/" className="flex items-center gap-4">
               <img src={logo} alt="Long Island Collectors Co. crest logo" className="h-16 md:h-20 w-auto object-contain drop-shadow-[0_0_15px_rgba(212,175,55,0.2)]" />
               <span className="hidden sm:block text-gold text-xl md:text-2xl font-['Inter'] font-bold tracking-wider text-shadow-sm">
                 Long Island Collectors Co.
               </span>
-            </a>
+            </Link>
           </div>
           
           {/* Desktop Menu */}
           <div className="hidden md:flex space-x-6 lg:space-x-8 items-center flex-nowrap shrink-0">
-            <a href="#sell" className="text-navy bg-gold px-4 py-2 rounded-md hover:bg-yellow-500 shadow-gold-glow transition-all font-bold uppercase tracking-wide text-sm whitespace-nowrap">
+            <a href="/#sell" className="text-navy bg-gold px-4 py-2 rounded-md hover:bg-yellow-500 shadow-gold-glow transition-all font-bold uppercase tracking-wide text-sm whitespace-nowrap">
               Sell to Us
             </a>
-            <a href="#vault" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
+            <a href="/#vault" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
               The Vault
             </a>
             <a href={data.livestream.url} target="_blank" rel="noreferrer" className="text-gray-300 hover:text-gold transition-colors font-medium uppercase text-sm tracking-wider whitespace-nowrap">
@@ -60,14 +61,14 @@ const Navbar = () => {
           <div className="px-4 py-6 space-y-4">
             <a 
               onClick={() => setIsMenuOpen(false)} 
-              href="#sell" 
+              href="/#sell" 
               className="block text-center text-navy bg-gold p-3 rounded font-bold text-lg uppercase shadow-gold-glow"
             >
               Sell to Us
             </a>
             <a 
               onClick={() => setIsMenuOpen(false)} 
-              href="#vault" 
+              href="/#vault" 
               className="block text-center text-gray-300 hover:text-gold py-3 text-lg uppercase border-b border-gold/10"
             >
               The Vault
