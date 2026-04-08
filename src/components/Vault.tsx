@@ -79,7 +79,7 @@ const Vault = () => {
                   </div>
                 </div>
                 <div className="flex-1 flex flex-col justify-between">
-                  <h3 className="text-sm font-semibold text-white leading-tight mb-4 line-clamp-2" title={item.title}>
+                  <h3 className="text-sm md:text-base font-semibold text-white leading-tight mb-4 line-clamp-2" title={item.title}>
                     {item.title}
                   </h3>
                   <a 
