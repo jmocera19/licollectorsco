@@ -60,12 +60,21 @@ ipcMain.handle('remove-vault-item', async (event, targetId) => {
 ipcMain.handle('add-vault-item', async (event, itemId) => {
   return new Promise((resolve) => {
     exec(`node scripts/add-to-vault.js ${itemId}`, { cwd: cwdPath }, (error, stdout, stderr) => {
-      // The script will resolve dynamically. 
-      // If eBay throws a 404, the stderr triggers but the application won't crash!
       if (error) {
-        resolve({ success: false, error: error.message, stdout, stderr });
+        resolve({ success: false, error: "Failed to fetch listing", stdout, stderr });
       } else {
-        resolve({ success: true, stdout });
+        try {
+          const rawData = fs.readFileSync(dataPath, 'utf8');
+          const dataObj = JSON.parse(rawData);
+          const itemExists = dataObj.vault && dataObj.vault.some(item => item.id === itemId);
+          if (itemExists) {
+            resolve({ success: true, stdout });
+          } else {
+            resolve({ success: false, error: "Failed to fetch listing", stdout, stderr });
+          }
+        } catch (readErr) {
+          resolve({ success: false, error: "Failed to verify listing in vault", stdout, stderr });
+        }
       }
     });
   });

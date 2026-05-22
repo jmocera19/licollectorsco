@@ -12,46 +12,107 @@ if (itemIds.length === 0) {
   process.exit(1);
 }
 
+// Manual environment variables parser to avoid third-party dependencies
+function loadEnv() {
+  const envPath = path.resolve(__dirname, '../.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    envContent.split(/\r?\n/).forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        const key = match[1];
+        let value = match[2] || '';
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        } else if (value.startsWith("'") && value.endsWith("'")) {
+          value = value.slice(1, -1);
+        }
+        process.env[key] = value.trim();
+      }
+    });
+  }
+}
+
+async function getAccessToken(clientId, clientSecret) {
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const response = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${auth}`
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      scope: 'https://api.ebay.com/oauth/api_scope'
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to retrieve eBay access token (Status ${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
 async function run() {
+  loadEnv();
+
+  const clientId = process.env.EBAY_CLIENT_ID;
+  const clientSecret = process.env.EBAY_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    console.error("❌ Missing EBAY_CLIENT_ID or EBAY_CLIENT_SECRET in .env file.");
+    process.exit(1);
+  }
+
   const dataPath = path.resolve(__dirname, '../src/data.json');
-  const dataContent = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-  
-  // Optional: You could wipe the vault empty before the loop if you want an absolute real-time match of your active stock instead of retaining old ones.
-  // dataContent.vault = [];
+  let dataContent;
+  try {
+    dataContent = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+  } catch (err) {
+    console.error(`❌ Failed to read or parse data.json: ${err.message}`);
+    process.exit(1);
+  }
+
+  let token;
+  try {
+    token = await getAccessToken(clientId, clientSecret);
+  } catch (err) {
+    console.error(`❌ OAuth Token Error: ${err.message}`);
+    process.exit(1);
+  }
+
+  let hasError = false;
 
   for (const itemId of itemIds) {
-    const url = `https://www.ebay.com/itm/${itemId}`;
     try {
+      const restfulId = encodeURIComponent(`v1|${itemId}|0`);
+      const url = `https://api.ebay.com/buy/browse/v1/item/${restfulId}`;
       console.log(`\nFetching eBay listing: ${url}`);
-      const req = await fetch(url, {
+
+      const response = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml'
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!req.ok) {
-        throw new Error(`eBay returned status ${req.status}`);
-      }
-      
-      const html = await req.text();
-      
-      const titleMatch = html.match(/<meta property="og:title" content="(.*?)"/i);
-      const title = titleMatch ? titleMatch[1].replace(' | eBay', '').trim() : 'Unknown Item';
-      
-      const imgMatch = html.match(/<meta property="og:image" content="(.*?)"/i);
-      const image = imgMatch ? imgMatch[1] : '';
-      
-      let price = 'Check Listing';
-      const priceMatch = html.match(/class="x-price-primary[^>]*>\s*\$?(.*?)\s*<\//i);
-      if (priceMatch) {
-        price = `$${priceMatch[1]}`;
-      } else {
-        const backupMatch = html.match(/"price":"([\d.]+)"/i);
-        if (backupMatch) price = `$${backupMatch[1]}`;
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`eBay API returned status ${response.status}: ${errText}`);
       }
 
-      const newItem = { id: itemId, title, price, image, url };
+      const itemData = await response.json();
+
+      // Extract fields safely
+      const title = itemData.title || 'Unknown Item';
+      const price = itemData.price && itemData.price.value ? `$${itemData.price.value}` : 'Check Listing';
+      const image = itemData.image && itemData.image.imageUrl ? itemData.image.imageUrl : '';
+      const itemUrl = itemData.itemWebUrl || `https://www.ebay.com/itm/${itemId}`;
+
+      const newItem = { id: itemId, title, price, image, url: itemUrl };
       console.log("Extracted:", JSON.stringify(newItem, null, 2));
 
       const existIndex = dataContent.vault.findIndex(v => v.id === itemId);
@@ -60,13 +121,21 @@ async function run() {
       } else {
         dataContent.vault.push(newItem);
       }
-      
-      // Delay to avoid extremely aggressive IP bans from eBay if fetching in high loops
-      await new Promise(r => setTimeout(r, 1000));
+
+      // Small delay to be clean
+      await new Promise(r => setTimeout(r, 500));
 
     } catch (err) {
-      console.error(`Error scraping eBay ID ${itemId}:`, err.message);
+      console.error(`❌ Error retrieving eBay ID ${itemId}:`, err.message);
+      hasError = true;
     }
+  }
+
+  // Only rewrite to data.json if we successfully added at least one item
+  if (hasError) {
+    console.error("\n❌ Batch sync encountered errors.");
+    fs.writeFileSync(dataPath, JSON.stringify(dataContent, null, 2));
+    process.exit(1);
   }
 
   // Rewrite entire blob structure globally after all IDs are validated
@@ -75,11 +144,11 @@ async function run() {
   const stats = fs.statSync(dataPath);
   if (stats.size > 500 * 1024) {
     console.warn(`\n⚠️  WARNING: src/data.json is approaching heavy capacities (${(stats.size / 1024).toFixed(2)} KB).`);
-    console.warn('Consider migrating to a hosted database architecture to guarantee strict frontend hydration speeds.');
   }
 
   console.log('\n--- BATCH SYNC SUCCESS! ---');
   console.log('✅ src/data.json is rewritten with fresh logic constraints.');
+  process.exit(0);
 }
 
 run();
