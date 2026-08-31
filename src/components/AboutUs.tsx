@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-// @ts-ignore
 import logo from '../assets/LogoSVG.svg';
 
 const AboutUs = () => {

@@ -15,7 +15,7 @@ export default defineConfig({
             if (id.includes('framer-motion')) {
               return 'vendor-motion';
             }
-            if (id.includes('react-router-dom') || id.includes('react-helmet-async') || id.includes('react-router')) {
+            if (id.includes('react-router-dom') || id.includes('react-router')) {
               return 'vendor-routing';
             }
             return 'vendor';
@@ -25,4 +25,3 @@ export default defineConfig({
     }
   }
 })
-

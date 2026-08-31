@@ -1,8 +1,8 @@
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Helmet } from 'react-helmet-async';
 import ReactMarkdown from 'react-markdown';
 import postsData from '../posts.json';
+import Seo from '../components/Seo';
 
 interface Post {
   id: string;
@@ -21,9 +21,12 @@ const BlogPost = () => {
   if (!post) {
     return (
       <section className="min-h-screen bg-navy flex flex-col items-center justify-center text-center px-4">
-        <Helmet>
-          <title>Post Not Found | Long Island Collectors Co.</title>
-        </Helmet>
+        <Seo
+          title="Post Not Found | Long Island Collectors Co."
+          description="The requested article could not be found."
+          path={`/blog/${slug ?? ''}`}
+          noIndex
+        />
         <h1 className="text-4xl font-bold text-white mb-4">Post Not Found</h1>
         <p className="text-gray-400 mb-8">The post you're looking for doesn't exist or may have been removed.</p>
         <Link to="/blog" className="px-8 py-3 bg-gold text-navy font-bold rounded shadow-gold-glow hover:bg-yellow-500 transition-colors uppercase tracking-wide">
@@ -39,16 +42,42 @@ const BlogPost = () => {
     day: 'numeric'
   });
 
+  const canonicalPath = `/blog/${post.slug}`;
+  const articleStructuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.excerpt,
+    datePublished: post.date,
+    dateModified: post.date,
+    mainEntityOfPage: `https://licollectorsco.com${canonicalPath}`,
+    image: 'https://licollectorsco.com/og_preview.jpg',
+    author: {
+      '@type': 'Organization',
+      name: 'Long Island Collectors Co.',
+      url: 'https://licollectorsco.com/',
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Long Island Collectors Co.',
+      url: 'https://licollectorsco.com/',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://licollectorsco.com/og_preview.jpg',
+      },
+    },
+  };
+
   return (
     <section className="min-h-screen bg-navy py-24 px-4">
-      <Helmet>
-        <title>{post.title} | Long Island Collectors Co.</title>
-        <meta name="description" content={post.excerpt} />
-        <meta property="og:title" content={`${post.title} | Long Island Collectors Co.`} />
-        <meta property="og:description" content={post.excerpt} />
-        <meta property="og:type" content="article" />
-        <meta property="article:published_time" content={post.date} />
-      </Helmet>
+      <Seo
+        title={`${post.title} | LI Collectors Co.`}
+        description={post.excerpt}
+        path={canonicalPath}
+        type="article"
+        publishedTime={post.date}
+        structuredData={articleStructuredData}
+      />
 
       <div className="max-w-3xl mx-auto">
         {/* Back link */}

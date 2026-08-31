@@ -7,25 +7,42 @@ import GradingInfo from './components/GradingInfo';
 import AboutUs from './components/AboutUs';
 import BlogIndex from './pages/BlogIndex';
 import BlogPost from './pages/BlogPost';
+import Seo from './components/Seo';
 import { motion, useScroll, useSpring } from 'framer-motion';
-import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { initGA, useAnalytics } from './utils/useAnalytics';
 
 // Initialize the GA layer once at root
 initGA();
 
+const storeStructuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'Store',
+  name: 'Long Island Collectors Co.',
+  description: 'Buy and sell graded Pokémon cards, Funko Pops, and collectible collections with a Long Island specialist.',
+  url: 'https://licollectorsco.com/',
+  image: 'https://licollectorsco.com/og_preview.jpg',
+  email: 'info@licollectorsco.com',
+  priceRange: '$$',
+  areaServed: {
+    '@type': 'Place',
+    name: 'Long Island, New York',
+  },
+  sameAs: [
+    'https://www.ebay.com/usr/longislandcollectorsco',
+    'https://www.instagram.com/licollectorsco',
+    'https://www.tiktok.com/@licollectorsco',
+    'https://www.youtube.com/@LongIslandCollectorsCo',
+  ],
+};
+
 const HomePage = () => (
   <>
-    <Helmet>
-      <title>Long Island Collectors Co. | We Buy & Sell Pokémon & Funko</title>
-      <meta name="description" content="The premier destination for high-end graded Pokémon slabs and Funko Pops. Sell your collection to us for top dollar." />
-      <meta property="og:title" content="Long Island Collectors Co. | We Buy & Sell Pokémon & Funko" />
-      <meta property="og:description" content="The premier destination for high-end graded Pokémon slabs and Funko Pops. Sell your collection to us for top dollar." />
-      <meta property="og:image" content="https://www.licollectorsco.com/assets/LogoSVG.svg" />
-      <meta property="og:url" content="https://www.licollectorsco.com" />
-      <meta property="og:type" content="website" />
-      <meta name="twitter:card" content="summary_large_image" />
-    </Helmet>
+    <Seo
+      title="Long Island Collectors Co. | We Buy & Sell Pokémon & Funko"
+      description="Buy or sell graded Pokémon cards, Funko Pops, and collectible collections with a trusted Long Island specialist. Request a fast, fair quote."
+      path="/"
+      structuredData={storeStructuredData}
+    />
     <main className="space-y-4">
       <Hero />
       <SellCollection />
@@ -48,8 +65,7 @@ function App() {
   });
 
   return (
-    <HelmetProvider>
-      <div className="min-h-screen bg-navy selection:bg-gold selection:text-navy font-sans">
+    <div className="min-h-screen bg-navy selection:bg-gold selection:text-navy font-sans">
         <motion.div
         className="fixed top-0 left-0 right-0 h-1 bg-gold z-50 origin-left"
         style={{ scaleX }}
@@ -91,8 +107,7 @@ function App() {
         </a>
         <p className="text-gray-500 font-light text-sm">© {new Date().getFullYear()} Long Island Collectors Co. All rights reserved.</p>
       </footer>
-      </div>
-    </HelmetProvider>
+    </div>
   );
 }
 

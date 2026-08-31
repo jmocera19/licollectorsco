@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate:sitemap": "node scripts/generate-sitemap.js",
+    "prebuild": "npm run generate:sitemap",
+    "build": "tsc -b && vite build && node scripts/prerender-pages.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -17,7 +19,6 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-ga4": "^3.0.1",
-    "react-helmet-async": "^3.0.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.14.0",
     "tailwind-merge": "^3.5.0"
