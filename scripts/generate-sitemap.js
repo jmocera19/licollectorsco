@@ -52,4 +52,5 @@ try {
 
 } catch (error) {
   console.error('❌ Failed to generate sitemap:', error);
+  process.exitCode = 1;
 }

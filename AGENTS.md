@@ -39,9 +39,14 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
   outbound and `mailto:` link clicks are captured as events.
 - `manager/` is a separate Electron app with its own `package.json` (`npm install` and
   `npm start` inside `manager/`). It edits `src/data.json`/`src/posts.json`; its
-  "Sync Live" button runs sitemap generation then `git add . && git commit && git push
-  origin main`. Because `git add .` stages all uncommitted changes, check the worktree
-  first and ensure only intended changes are present before syncing.
+  "Sync Live" button is a single main-process workflow that verifies `main` is
+  synchronized with `origin/main`, rejects pre-existing staged or unrelated
+  modified/untracked files, regenerates the sitemap, and allows only
+  `src/data.json`, `src/posts.json`, and `public/sitemap.xml`. It fingerprints and
+  displays the complete managed diff, confirms before staging/committing/pushing,
+  stages only approved paths, commits `Content update: YYYY-MM-DD`, and uses plain
+  `git push origin main` without force options. Cancellation or blocking may leave
+  `public/sitemap.xml` regenerated on disk but never commits or pushes.
 - The canonical domain is `licollectorsco.com` (`https://licollectorsco.com` in URLs) and
   is hardcoded in several places (scripts, `Seo.tsx`, `App.tsx`, and
   `functions/_middleware.js`) — change all occurrences together.

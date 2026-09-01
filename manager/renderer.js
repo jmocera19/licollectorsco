@@ -123,34 +123,62 @@ addBtn.addEventListener('click', async () => {
 
 syncBtn.addEventListener('click', async () => {
   syncBtn.disabled = true;
-  syncBtn.innerText = "Pushing to GitHub...";
+  syncBtn.innerText = "Syncing...";
   syncBtn.classList.replace('bg-green-600', 'bg-blue-600');
   syncBtn.classList.replace('hover:bg-green-500', 'hover:bg-blue-500');
   syncStatus.innerText = "";
-  
-  const res = await window.api.syncLive();
 
-  if (res.success) {
-    syncStatus.innerText = "Live Deployment Running!";
-    syncStatus.className = "text-sm font-medium text-green-400";
-    console.log("Git Push Stdout:", res.stdout);
-  } else {
-    if (res.stdout && res.stdout.includes('nothing to commit')) {
-        syncStatus.innerText = "Already Up To Date.";
-        syncStatus.className = "text-sm font-medium text-yellow-500";
+  try {
+    const res = await window.api.syncLive();
+    const hint = res.hint ? ` ${res.hint}` : '';
+
+    if (res.status === 'deployed') {
+      syncStatus.innerText = `Live Deployment Running! Commit ${res.commitHash}.`;
+      syncStatus.className = "text-sm font-medium text-green-400";
+      console.log("Git Push Stdout:", res.stdout);
+    } else if (res.status === 'no-changes') {
+      syncStatus.innerText = "Already Up To Date.";
+      syncStatus.className = "text-sm font-medium text-yellow-500";
+    } else if (res.status === 'cancelled') {
+      syncStatus.innerText = res.message;
+      syncStatus.className = "text-sm font-medium text-yellow-500";
+    } else if (res.status === 'blocked' || res.status === 'changed-during-confirmation') {
+      syncStatus.innerText = `${res.message}${hint}`;
+      syncStatus.className = "text-sm font-medium text-red-500";
+      console.error("Sync blocked:", res);
+    } else if (res.status === 'commit-failed') {
+      syncStatus.innerText = `${res.message}${hint}`;
+      syncStatus.className = "text-sm font-medium text-red-500";
+      console.error("Commit Error:", res.detail, res.cleanup);
+    } else if (res.status === 'committed-not-pushed') {
+      syncStatus.innerText = `${res.message}${hint}`;
+      syncStatus.className = "text-sm font-medium text-red-500";
+      console.error("Local Commit Not Pushed:", res.error, res.detail, res.stderr);
+    } else if (res.status === 'committed-push-failed') {
+      syncStatus.innerText = `${res.message}${hint}`;
+      syncStatus.className = "text-sm font-medium text-red-500";
+      console.error("Push Error:", res.detail, res.stderr);
+    } else if (res.status === 'error') {
+      syncStatus.innerText = `Sync failed at ${res.step}.${hint}`;
+      syncStatus.className = "text-sm font-medium text-red-500";
+      console.error("Sync Error:", res.message, res.detail, res.stderr);
     } else {
-        syncStatus.innerText = "Sync Failed. See console.";
-        syncStatus.className = "text-sm font-medium text-red-500";
-        console.error("Sync Error:", res.error, res.stderr);
+      syncStatus.innerText = "Sync returned an unexpected result. See console.";
+      syncStatus.className = "text-sm font-medium text-red-500";
+      console.error("Unexpected Sync Result:", res);
     }
+  } catch (error) {
+    syncStatus.innerText = "Sync failed unexpectedly. See console.";
+    syncStatus.className = "text-sm font-medium text-red-500";
+    console.error("Sync Error:", error);
+  } finally {
+    syncBtn.disabled = false;
+    syncBtn.innerText = "Sync to Live Site";
+    syncBtn.classList.replace('bg-blue-600', 'bg-green-600');
+    syncBtn.classList.replace('hover:bg-blue-500', 'hover:bg-green-500');
+
+    setTimeout(() => { syncStatus.innerText = ''; }, 5000);
   }
-
-  syncBtn.disabled = false;
-  syncBtn.innerText = "Sync to Live Site";
-  syncBtn.classList.replace('bg-blue-600', 'bg-green-600');
-  syncBtn.classList.replace('hover:bg-blue-500', 'hover:bg-green-500');
-
-  setTimeout(() => { syncStatus.innerText = ''; }, 5000);
 });
 
 // =============================================
