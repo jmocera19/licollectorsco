@@ -21,6 +21,11 @@ function switchTab(tab) {
   if (tab === 'blog') refreshBlogPosts();
 }
 
+// Tab controls: real button elements keep keyboard activation; listeners are
+// attached exactly once per renderer load (tab buttons are never re-rendered).
+document.getElementById('tab-inventory').addEventListener('click', () => switchTab('inventory'));
+document.getElementById('tab-blog').addEventListener('click', () => switchTab('blog'));
+
 // =============================================
 // INVENTORY PANEL
 // =============================================
@@ -31,7 +36,9 @@ const syncBtn = document.getElementById('sync-btn');
 const addStatus = document.getElementById('add-status');
 const syncStatus = document.getElementById('sync-status');
 
-const MISSING_IMAGE_PLACEHOLDER = 'https://via.placeholder.com/150/000000/D4AF37?text=Missing';
+// Static local fallback image (navy background, gold "No image" text).
+// Encoded data URI — metadata only, never a network request.
+const MISSING_IMAGE_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 150'%3E%3Crect width='150' height='150' fill='%230A192F'/%3E%3Ctext x='75' y='80' fill='%23D4AF37' font-family='system-ui,Segoe UI,sans-serif' font-size='14' text-anchor='middle'%3ENo image%3C/text%3E%3C/svg%3E";
 let importPending = false;
 let syncPending = false;
 

@@ -691,6 +691,14 @@ const createWindow = () => {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
   });
+
+  // Renderer hardening: block unexpected navigations (e.g. drag-and-drop) and
+  // deny new windows. Initial loadFile and programmatic reloads are unaffected.
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
   win.loadFile('index.html');
 };
 

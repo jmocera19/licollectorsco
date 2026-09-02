@@ -2,21 +2,9 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
   <title>LI Collectors Co - Manager</title>
-  <!-- Load Tailwind natively for rapid prototyping -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Brand matching configuration mapping to Tailwind's arbitrary variables-->
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: { navy: '#0A192F', gold: '#D4AF37' },
-          fontFamily: { sans: ['Inter', 'sans-serif'] }
-        }
-      }
-    }
-  </script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-navy text-white font-sans flex flex-col h-screen overflow-hidden selection:bg-gold selection:text-navy">
   <!-- Top Navigation Header -->
@@ -39,10 +27,10 @@
 
   <!-- Tab Bar -->
   <div class="flex border-b border-gold/20 bg-[#061020] flex-shrink-0">
-    <button id="tab-inventory" onclick="switchTab('inventory')" class="tab-btn active-tab px-8 py-3 text-sm font-bold uppercase tracking-wider text-gold border-b-2 border-gold transition-colors">
+    <button id="tab-inventory" class="tab-btn active-tab px-8 py-3 text-sm font-bold uppercase tracking-wider text-gold border-b-2 border-gold transition-colors">
       Inventory
     </button>
-    <button id="tab-blog" onclick="switchTab('blog')" class="tab-btn px-8 py-3 text-sm font-bold uppercase tracking-wider text-gray-400 hover:text-gold border-b-2 border-transparent transition-colors">
+    <button id="tab-blog" class="tab-btn px-8 py-3 text-sm font-bold uppercase tracking-wider text-gray-400 hover:text-gold border-b-2 border-transparent transition-colors">
       Blog Editor
     </button>
   </div>

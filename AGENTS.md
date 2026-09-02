@@ -47,6 +47,14 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
   stages only approved paths, commits `Content update: YYYY-MM-DD`, and uses plain
   `git push origin main` without force options. Cancellation or blocking may leave
   `public/sitemap.xml` regenerated on disk but never commits or pushes.
+- Manager styling is generated, not remote: CSS sources are `manager/index.html`,
+  `manager/renderer.js`, `manager/tailwind.config.cjs`, and `manager/input.css`;
+  regenerate with `npm run generate:manager-css` (root, local Tailwind binary) whenever
+  Manager Tailwind classes change. `manager/styles.css` is generated, committed output —
+  never hand-edit it. The Manager loads no remote scripts, stylesheets, or fonts, and
+  its renderer enforces a CSP (`script-src 'self'`, no `unsafe-inline`/`unsafe-eval`).
+  Manager runtime verification: `npm run generate:manager-css`, `node --check` on the
+  Manager JavaScript, and `npm start` inside `manager/`.
 - The canonical domain is `licollectorsco.com` (`https://licollectorsco.com` in URLs) and
   is hardcoded in several places (scripts, `Seo.tsx`, `App.tsx`, and
   `functions/_middleware.js`) — change all occurrences together.

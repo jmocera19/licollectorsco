@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:manager-css": "tailwindcss -c manager/tailwind.config.cjs -i manager/input.css -o manager/styles.css",
     "generate:sitemap": "node scripts/generate-sitemap.js",
     "prebuild": "npm run generate:sitemap",
     "build": "tsc -b && vite build && node scripts/prerender-pages.js",
