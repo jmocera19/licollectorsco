@@ -6,6 +6,6 @@ contextBridge.exposeInMainWorld('api', {
   addVaultItem: (id) => ipcRenderer.invoke('add-vault-item', id),
   syncLive: () => ipcRenderer.invoke('sync-live'),
   readPosts: () => ipcRenderer.invoke('read-posts'),
-  publishPost: (post) => ipcRenderer.invoke('publish-post', post),
+  publishPost: (post, options) => ipcRenderer.invoke('publish-post', post, options ?? {}),
   deletePost: (slug) => ipcRenderer.invoke('delete-post', slug),
 });

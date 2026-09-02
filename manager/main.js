@@ -2,22 +2,38 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { exec, execFile } = require('child_process');
+const { execFile } = require('child_process');
 
 const dataPath = path.join(__dirname, '../src/data.json');
+const postsPath = path.join(__dirname, '../src/posts.json');
 const cwdPath = path.join(__dirname, '..');
 const COMMAND_TIMEOUT_MS = 30_000;
 const COMMAND_MAX_BUFFER = 10 * 1024 * 1024;
 const MAX_DIFF_PREVIEW_LENGTH = 4 * 1024;
 const MANAGED_FILES = ['src/data.json', 'src/posts.json', 'public/sitemap.xml'];
 const MANAGED_FILE_SET = new Set(MANAGED_FILES);
+const ITEM_ID_RE = /^\d{9,15}$/;
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_SLUG_LENGTH = 80;
+const MAX_TITLE_LENGTH = 200;
+const MAX_EXCERPT_LENGTH = 300;
+const MAX_BODY_LENGTH = 200_000;
+const MAX_TAGS = 10;
+const MAX_TAG_LENGTH = 40;
+const OUTPUT_TAIL_LENGTH = 2000;
+const VAULT_RESULT_PREFIX = '__VAULT_RESULT__ ';
 
 let mainWindow = null;
+let importInFlight = false;
 
-const runExternal = (file, args, useGit = false) => new Promise((resolve) => {
+const runExternal = (file, args, { useGit = false, extraEnv } = {}) => new Promise((resolve) => {
   const options = {
     cwd: cwdPath,
-    env: useGit ? { ...process.env, GIT_TERMINAL_PROMPT: '0' } : process.env,
+    env: {
+      ...process.env,
+      ...(useGit ? { GIT_TERMINAL_PROMPT: '0' } : {}),
+      ...(extraEnv || {}),
+    },
     maxBuffer: COMMAND_MAX_BUFFER,
     timeout: COMMAND_TIMEOUT_MS,
     windowsHide: true,
@@ -29,6 +45,8 @@ const runExternal = (file, args, useGit = false) => new Promise((resolve) => {
     stderr,
     error,
     code: error ? error.code : 0,
+    signal: error ? (error.signal || null) : null,
+    killed: Boolean(error && error.killed),
     timedOut: Boolean(error && (error.code === 'ETIMEDOUT' || error.killed)),
   });
 
@@ -39,8 +57,8 @@ const runExternal = (file, args, useGit = false) => new Promise((resolve) => {
   }
 });
 
-const runGit = (args) => runExternal('git', args, true);
-const runNode = (args) => runExternal(process.execPath, args);
+const runGit = (args) => runExternal('git', args, { useGit: true });
+const runNode = (args) => runExternal(process.execPath, args, { extraEnv: { ELECTRON_RUN_AS_NODE: '1' } });
 
 const normalizePath = (filePath) => filePath.replaceAll('\\', '/').replace(/^\.\//, '');
 
@@ -76,6 +94,210 @@ const blockedResult = (step, reason, message, hint, files = []) => ({
   hint,
   files: normalizePaths(files),
 });
+
+const newYorkDate = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+};
+
+const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isValidItemId = (value) => typeof value === 'string' && ITEM_ID_RE.test(value);
+
+const isValidSlug = (value) => typeof value === 'string'
+  && value.length >= 1
+  && value.length <= MAX_SLUG_LENGTH
+  && SLUG_RE.test(value);
+
+const normalizeTags = (value) => {
+  if (!Array.isArray(value)) return { error: 'Tags must be a list of short text labels.' };
+  const tags = [];
+  for (const tag of value) {
+    if (typeof tag !== 'string') return { error: 'Tags must be a list of short text labels.' };
+    const trimmed = tag.trim();
+    if (!trimmed) continue;
+    if (trimmed.length > MAX_TAG_LENGTH) {
+      return { error: `Each tag must be at most ${MAX_TAG_LENGTH} characters.` };
+    }
+    if (!tags.includes(trimmed)) tags.push(trimmed);
+  }
+  if (tags.length > MAX_TAGS) return { error: `Use at most ${MAX_TAGS} tags.` };
+  return { tags };
+};
+
+const validatePostPayload = (post) => {
+  if (!isPlainObject(post)) {
+    return { ok: false, errors: ['The post payload must be an object.'] };
+  }
+
+  const errors = [];
+  const slug = typeof post.slug === 'string' ? post.slug.trim() : '';
+  const title = typeof post.title === 'string' ? post.title.trim() : '';
+  const excerpt = typeof post.excerpt === 'string' ? post.excerpt.trim() : '';
+  const body = typeof post.body === 'string' ? post.body.trim() : '';
+
+  if (!isValidSlug(slug)) {
+    errors.push('Slug must be 1-80 lowercase letters, numbers, or single hyphens, and may not start or end with a hyphen.');
+  }
+  if (title.length < 1 || title.length > MAX_TITLE_LENGTH) {
+    errors.push(`Title must be 1-${MAX_TITLE_LENGTH} characters.`);
+  }
+  if (excerpt.length < 1 || excerpt.length > MAX_EXCERPT_LENGTH) {
+    errors.push(`Excerpt must be 1-${MAX_EXCERPT_LENGTH} characters.`);
+  }
+  if (body.length < 1 || body.length > MAX_BODY_LENGTH) {
+    errors.push(`Body must be 1-${MAX_BODY_LENGTH} characters.`);
+  }
+
+  const tagsResult = normalizeTags(post.tags);
+  if (tagsResult.error) errors.push(tagsResult.error);
+
+  if (errors.length > 0) return { ok: false, errors };
+
+  return {
+    ok: true,
+    post: { slug, title, excerpt, body, tags: tagsResult.tags },
+  };
+};
+
+const validateOverwriteOptions = (options) => {
+  if (options === undefined || options === null) return { ok: true, overwrite: false };
+  if (!isPlainObject(options)) return { ok: false, message: 'Publish options must be an object.' };
+  const { overwrite } = options;
+  if (overwrite === undefined) return { ok: true, overwrite: false };
+  if (typeof overwrite !== 'boolean') return { ok: false, message: 'The overwrite option must be true or false.' };
+  return { ok: true, overwrite };
+};
+
+const validateVaultData = (data) => {
+  if (!isPlainObject(data)) return 'data.json does not contain a JSON object.';
+  if (!Array.isArray(data.vault)) return 'data.json does not contain a vault array.';
+  for (const item of data.vault) {
+    if (!isPlainObject(item)) return 'data.json contains a vault entry that is not an object.';
+    if (typeof item.id !== 'string' || typeof item.title !== 'string'
+      || typeof item.price !== 'string' || typeof item.image !== 'string'
+      || typeof item.url !== 'string') {
+      return 'data.json contains a vault entry missing a string id, title, price, image, or url.';
+    }
+  }
+  return null;
+};
+
+const validatePostsData = (data) => {
+  if (!isPlainObject(data)) return 'posts.json does not contain a JSON object.';
+  if (!Array.isArray(data.posts)) return 'posts.json does not contain a posts array.';
+  for (const post of data.posts) {
+    if (!isPlainObject(post)) return 'posts.json contains a post entry that is not an object.';
+    if (typeof post.slug !== 'string' || typeof post.title !== 'string' || typeof post.date !== 'string') {
+      return 'posts.json contains a post entry missing a string slug, title, or date.';
+    }
+  }
+  return null;
+};
+
+const readJsonFile = (filePath, validateShape) => {
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    return { status: 'error', step: 'read', message: error.message };
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return { status: 'error', step: 'parse', message: error.message };
+  }
+
+  const shapeProblem = validateShape(parsed);
+  if (shapeProblem) {
+    return { status: 'error', step: 'shape', message: shapeProblem };
+  }
+
+  return { status: 'ok', data: parsed };
+};
+
+// Atomic JSON write: unique temp file in the destination directory, then a
+// same-volume rename (Windows: MoveFileEx REPLACE_EXISTING). On failure only
+// this operation's own temp file is removed and the destination is untouched.
+// Pairs with the duplicated ESM helper in scripts/add-to-vault.js.
+const writeJsonAtomic = (filePath, value) => {
+  const temporaryPath = path.join(
+    path.dirname(filePath),
+    `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
+  );
+  try {
+    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
+    fs.renameSync(temporaryPath, filePath);
+    return { ok: true };
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch (cleanupError) {
+      /* only the operation's own temp file is targeted */
+    }
+    return { ok: false, message: error.message, code: error.code };
+  }
+};
+
+const tailOutput = (value) => {
+  const text = typeof value === 'string' ? value : '';
+  return text.length > OUTPUT_TAIL_LENGTH ? text.slice(-OUTPUT_TAIL_LENGTH) : text;
+};
+
+const parseVaultResultLine = (stdout) => {
+  if (typeof stdout !== 'string') return null;
+  const lines = stdout.split(/\r?\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+    if (!line.startsWith(VAULT_RESULT_PREFIX)) return null;
+    try {
+      const parsed = JSON.parse(line.slice(VAULT_RESULT_PREFIX.length));
+      if (isPlainObject(parsed) && Array.isArray(parsed.added) && Array.isArray(parsed.failed)) {
+        return parsed;
+      }
+    } catch (error) {
+      /* malformed summary falls through to null */
+    }
+    return null;
+  }
+  return null;
+};
+
+const normalizedImportMessage = (reason) => {
+  switch (reason) {
+    case 'missing-credentials':
+      return 'eBay credentials are missing. Add EBAY_CLIENT_ID and EBAY_CLIENT_SECRET to the .env file, then try again.';
+    case 'auth-failed':
+      return 'eBay rejected the credentials. Check EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in the .env file.';
+    case 'item-not-found':
+      return 'eBay could not find that item ID. The listing may have ended or been removed.';
+    case 'network-failed':
+      return 'Could not reach eBay. Check the network connection and try again.';
+    case 'timeout':
+      return 'The eBay import timed out. Try again.';
+    case 'invalid-response':
+      return 'eBay returned an unexpected response. Try again.';
+    default:
+      return 'Import failed. Review the console output and try again.';
+  }
+};
+
+const importReasonFromResult = (resultLine, result) => {
+  if (resultLine && resultLine.failed.length > 0) {
+    return typeof resultLine.failed[0].reason === 'string' ? resultLine.failed[0].reason : 'unknown';
+  }
+  if (result.timedOut) return 'timeout';
+  return 'unknown';
+};
 
 const parseStatus = (stdout) => {
   const records = stdout.split('\0');
@@ -486,49 +708,154 @@ app.on('window-all-closed', () => {
 
 // --- IPC: Load Active Data.json ---
 ipcMain.handle('read-vault', async () => {
-  try {
-    const rawData = fs.readFileSync(dataPath, 'utf8');
-    return JSON.parse(rawData);
-  } catch (err) {
-    return { vault: [], error: err.message };
-  }
+  const result = readJsonFile(dataPath, validateVaultData);
+  if (result.status !== 'ok') return result;
+  return { status: 'ok', vault: result.data.vault };
 });
 
 // --- IPC: Remove Target Item ID ---
 ipcMain.handle('remove-vault-item', async (event, targetId) => {
-  try {
-    const rawData = fs.readFileSync(dataPath, 'utf8');
-    const dataObj = JSON.parse(rawData);
-    dataObj.vault = dataObj.vault.filter(item => item.id !== targetId);
-    fs.writeFileSync(dataPath, JSON.stringify(dataObj, null, 2), 'utf8');
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
+  if (!isValidItemId(targetId)) {
+    return {
+      success: false,
+      error: 'invalid-item-id',
+      id: targetId,
+      message: 'Enter a numeric eBay item ID of 9-15 digits.',
+    };
   }
+
+  if (importInFlight) {
+    return {
+      success: false,
+      error: 'import-in-progress',
+      message: 'An eBay import is still running. Wait for it to finish before removing items.',
+    };
+  }
+
+  const readResult = readJsonFile(dataPath, validateVaultData);
+  if (readResult.status !== 'ok') {
+    return {
+      success: false,
+      error: `${readResult.step}-failed`,
+      step: readResult.step,
+      message: readResult.message,
+    };
+  }
+
+  const dataObj = readResult.data;
+  const remaining = dataObj.vault.filter((item) => isPlainObject(item) && item.id !== targetId);
+  if (remaining.length === dataObj.vault.length) {
+    return {
+      success: false,
+      error: 'not-found',
+      id: targetId,
+      message: `No vault item with ID ${targetId} was found. Nothing was removed.`,
+    };
+  }
+
+  dataObj.vault = remaining;
+  const writeResult = writeJsonAtomic(dataPath, dataObj);
+  if (!writeResult.ok) {
+    return {
+      success: false,
+      error: 'write-failed',
+      message: `Could not save data.json: ${writeResult.message}`,
+    };
+  }
+
+  return { success: true, removedId: targetId, remainingCount: remaining.length };
 });
 
 // --- IPC: Run add-to-vault Scraper ---
 ipcMain.handle('add-vault-item', async (event, itemId) => {
-  return new Promise((resolve) => {
-    exec(`node scripts/add-to-vault.js ${itemId}`, { cwd: cwdPath }, (error, stdout, stderr) => {
-      if (error) {
-        resolve({ success: false, error: "Failed to fetch listing", stdout, stderr });
-      } else {
-        try {
-          const rawData = fs.readFileSync(dataPath, 'utf8');
-          const dataObj = JSON.parse(rawData);
-          const itemExists = dataObj.vault && dataObj.vault.some(item => item.id === itemId);
-          if (itemExists) {
-            resolve({ success: true, stdout });
-          } else {
-            resolve({ success: false, error: "Failed to fetch listing", stdout, stderr });
-          }
-        } catch (readErr) {
-          resolve({ success: false, error: "Failed to verify listing in vault", stdout, stderr });
-        }
+  if (!isValidItemId(itemId)) {
+    return {
+      success: false,
+      error: 'invalid-item-id',
+      message: 'Enter a numeric eBay item ID of 9-15 digits.',
+    };
+  }
+
+  if (importInFlight) {
+    return {
+      success: false,
+      error: 'import-in-progress',
+      message: 'Another eBay import is already running. Wait for it to finish.',
+    };
+  }
+
+  importInFlight = true;
+  try {
+    const result = await runNode(['scripts/add-to-vault.js', itemId]);
+    const resultLine = parseVaultResultLine(result.stdout);
+
+    if (result.ok) {
+      const failedEntry = resultLine
+        ? resultLine.failed.find((entry) => isPlainObject(entry) && entry.id === itemId)
+        : null;
+      if (failedEntry) {
+        return {
+          success: false,
+          error: 'import-failed',
+          reason: typeof failedEntry.reason === 'string' ? failedEntry.reason : 'unknown',
+          message: normalizedImportMessage(typeof failedEntry.reason === 'string' ? failedEntry.reason : 'unknown'),
+          detail: {
+            stdoutTail: tailOutput(result.stdout),
+            stderrTail: tailOutput(result.stderr),
+            code: result.code,
+            timedOut: result.timedOut,
+          },
+        };
       }
-    });
-  });
+
+      // Verify the imported item independently of the child script's summary.
+      const readResult = readJsonFile(dataPath, validateVaultData);
+      if (readResult.status !== 'ok') {
+        return {
+          success: false,
+          error: 'verify-failed',
+          message: `The import script finished, but data.json could not be read: ${readResult.message}`,
+        };
+      }
+
+      const imported = readResult.data.vault.find((item) => isPlainObject(item) && item.id === itemId);
+      if (!imported) {
+        return {
+          success: false,
+          error: 'import-failed',
+          reason: importReasonFromResult(resultLine, result),
+          message: 'The import script finished, but the item was not found in the vault afterwards.',
+          detail: {
+            stdoutTail: tailOutput(result.stdout),
+            stderrTail: tailOutput(result.stderr),
+            code: result.code,
+            timedOut: result.timedOut,
+          },
+        };
+      }
+
+      return {
+        success: true,
+        item: { id: imported.id, title: imported.title, price: imported.price },
+      };
+    }
+
+    const reason = importReasonFromResult(resultLine, result);
+    return {
+      success: false,
+      error: 'import-failed',
+      reason,
+      message: normalizedImportMessage(reason),
+      detail: {
+        stdoutTail: tailOutput(result.stdout),
+        stderrTail: tailOutput(result.stderr),
+        code: result.code,
+        timedOut: result.timedOut,
+      },
+    };
+  } finally {
+    importInFlight = false;
+  }
 });
 
 // --- IPC: Perform Git Sync Automation ---
@@ -720,42 +1047,98 @@ ipcMain.handle('sync-live', async () => {
 
 // --- IPC: Read All Blog Posts ---
 ipcMain.handle('read-posts', async () => {
-  try {
-    const postsPath = path.join(__dirname, '../src/posts.json');
-    const raw = fs.readFileSync(postsPath, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    return { posts: [], error: err.message };
-  }
+  const result = readJsonFile(postsPath, validatePostsData);
+  if (result.status !== 'ok') return result;
+  return { status: 'ok', posts: result.data.posts };
 });
 
-// --- IPC: Publish New Blog Post ---
-ipcMain.handle('publish-post', async (event, post) => {
-  try {
-    const postsPath = path.join(__dirname, '../src/posts.json');
-    const raw = fs.readFileSync(postsPath, 'utf8');
-    const data = JSON.parse(raw);
-    // Remove any existing post with same slug (edit use case)
-    data.posts = data.posts.filter(p => p.slug !== post.slug);
-    data.posts.unshift(post); // newest first
-    fs.writeFileSync(postsPath, JSON.stringify(data, null, 2), 'utf8');
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
+// --- IPC: Publish New Blog Post (conflict-before-write) ---
+ipcMain.handle('publish-post', async (event, post, options) => {
+  const optionsResult = validateOverwriteOptions(options);
+  if (!optionsResult.ok) {
+    return { status: 'invalid', errors: [optionsResult.message], message: optionsResult.message };
   }
+
+  const postResult = validatePostPayload(post);
+  if (!postResult.ok) {
+    return { status: 'invalid', errors: postResult.errors, message: 'The post could not be validated.' };
+  }
+
+  const readResult = readJsonFile(postsPath, validatePostsData);
+  if (readResult.status !== 'ok') {
+    return { status: 'error', step: readResult.step, message: readResult.message };
+  }
+
+  const data = readResult.data;
+  const canonical = postResult.post;
+  const existing = data.posts.find((entry) => isPlainObject(entry) && entry.slug === canonical.slug);
+  const isReplacement = Boolean(existing);
+
+  // Conflict check happens before any write; nothing is modified here.
+  if (isReplacement && !optionsResult.overwrite) {
+    return {
+      status: 'conflict',
+      slug: canonical.slug,
+      existing: {
+        title: typeof existing.title === 'string' ? existing.title : canonical.slug,
+        date: typeof existing.date === 'string' ? existing.date : null,
+      },
+      wrote: false,
+    };
+  }
+
+  // Canonical object: id always mirrors slug; the renderer never supplies the
+  // authoritative date. Replacements preserve the original publication date;
+  // new posts use the current America/New_York calendar date.
+  const publishedPost = {
+    id: canonical.slug,
+    slug: canonical.slug,
+    title: canonical.title,
+    date: isReplacement ? existing.date : newYorkDate(),
+    tags: canonical.tags,
+    excerpt: canonical.excerpt,
+    body: canonical.body,
+  };
+
+  data.posts = data.posts.filter((entry) => !(isPlainObject(entry) && entry.slug === canonical.slug));
+  data.posts.unshift(publishedPost);
+
+  const writeResult = writeJsonAtomic(postsPath, data);
+  if (!writeResult.ok) {
+    return { status: 'error', step: 'write', message: `Could not save posts.json: ${writeResult.message}` };
+  }
+
+  return { status: 'published', slug: publishedPost.slug, date: publishedPost.date, created: !isReplacement };
 });
 
 // --- IPC: Delete Blog Post ---
 ipcMain.handle('delete-post', async (event, slug) => {
-  try {
-    const postsPath = path.join(__dirname, '../src/posts.json');
-    const raw = fs.readFileSync(postsPath, 'utf8');
-    const data = JSON.parse(raw);
-    data.posts = data.posts.filter(p => p.slug !== slug);
-    fs.writeFileSync(postsPath, JSON.stringify(data, null, 2), 'utf8');
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.message };
+  const trimmedSlug = typeof slug === 'string' ? slug.trim() : '';
+  if (!isValidSlug(trimmedSlug)) {
+    return { status: 'invalid', message: 'Invalid post slug.' };
   }
+
+  const readResult = readJsonFile(postsPath, validatePostsData);
+  if (readResult.status !== 'ok') {
+    return { status: 'error', step: readResult.step, message: readResult.message };
+  }
+
+  const data = readResult.data;
+  const remaining = data.posts.filter((entry) => !(isPlainObject(entry) && entry.slug === trimmedSlug));
+  if (remaining.length === data.posts.length) {
+    return {
+      status: 'not-found',
+      slug: trimmedSlug,
+      message: `No post with slug "${trimmedSlug}" was found. Nothing was deleted.`,
+    };
+  }
+
+  data.posts = remaining;
+  const writeResult = writeJsonAtomic(postsPath, data);
+  if (!writeResult.ok) {
+    return { status: 'error', step: 'write', message: `Could not save posts.json: ${writeResult.message}` };
+  }
+
+  return { status: 'deleted', slug: trimmedSlug, remainingCount: remaining.length };
 });
 
