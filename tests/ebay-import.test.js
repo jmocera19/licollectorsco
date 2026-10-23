@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -11,6 +13,20 @@ const { validateVaultData } = require('../shared/content.cjs');
 const { lockPathFor } = require('../shared/content.cjs');
 
 const silentLogger = { log() {}, error() {} };
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+const runCli = (args) => new Promise((resolve, reject) => {
+  const child = spawn(process.execPath, [path.join(projectRoot, 'scripts', 'add-to-vault.js'), ...args], {
+    cwd: projectRoot,
+    windowsHide: true,
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.on('error', reject);
+  child.on('close', (code) => resolve({ code, stdout, stderr }));
+});
 
 const siteData = () => ({
   livestream: { isLive: false, platform: 'eBay', url: 'https://ebay.com/usr/test' },
@@ -94,6 +110,40 @@ test('authentication failure marks the whole batch', async (t) => {
   }));
 
   assert.deepEqual(result.failed.map((entry) => entry.reason), ['auth-failed', 'auth-failed']);
+});
+
+test('a token timeout fails the batch without touching data.json', async (t) => {
+  const dataPath = tempDataFile(t);
+  const before = fs.readFileSync(dataPath, 'utf8');
+
+  const result = await importEbayItems(baseOptions(dataPath, {
+    http: async () => { throw new Error('The operation timed out'); },
+  }));
+
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.failed, [
+    { id: '111111111', reason: 'timeout' },
+    { id: '222222222', reason: 'timeout' },
+  ]);
+  assert.equal(fs.readFileSync(dataPath, 'utf8'), before);
+});
+
+test('an item timeout does not block a valid item in the same batch', async (t) => {
+  const dataPath = tempDataFile(t);
+  const http = async ({ url }) => {
+    if (url === TOKEN_URL) return tokenResponse();
+    const id = itemIdFromUrl(url);
+    if (id === '111111111') throw new Error('The operation timed out');
+    return itemResponse(id);
+  };
+
+  const result = await importEbayItems(baseOptions(dataPath, { http }));
+  const stored = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+
+  assert.deepEqual(result.added, ['222222222']);
+  assert.deepEqual(result.failed, [{ id: '111111111', reason: 'timeout' }]);
+  assert.deepEqual(stored.vault.map((item) => item.id), ['222222222']);
+  assert.equal(validateVaultData(stored), null);
 });
 
 test('successful imports preserve unrelated site sections and write every item', async (t) => {
@@ -309,4 +359,52 @@ test('a saved import surfaces lock cleanup warnings without failing the item', a
   assert.equal(fs.existsSync(lockPathFor(dataPath)), true);
 
   fs.rmSync(lockPathFor(dataPath), { recursive: true, force: true });
+});
+
+test('a filesystem write failure reports write-failed and leaves content unchanged', async (t) => {
+  const dataPath = tempDataFile(t);
+  const before = fs.readFileSync(dataPath, 'utf8');
+  const originalRename = fs.renameSync;
+
+  fs.renameSync = function (source, destination) {
+    if (destination === dataPath) {
+      const error = new Error('Injected permission failure');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return originalRename.call(fs, source, destination);
+  };
+
+  const http = async ({ url }) => {
+    if (url === TOKEN_URL) return tokenResponse();
+    return itemResponse(itemIdFromUrl(url));
+  };
+
+  let result;
+  try {
+    result = await importEbayItems(baseOptions(dataPath, {
+      http,
+      itemIds: ['111111111'],
+    }));
+  } finally {
+    fs.renameSync = originalRename;
+  }
+
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.failed, [{ id: '111111111', reason: 'write-failed' }]);
+  assert.equal(fs.readFileSync(dataPath, 'utf8'), before);
+  assert.equal(fs.existsSync(lockPathFor(dataPath)), false);
+  assert.deepEqual(
+    fs.readdirSync(path.dirname(dataPath)).filter((entry) => entry.endsWith('.tmp')),
+    [],
+  );
+});
+
+test('the CLI exits nonzero and emits a failure summary for invalid IDs', async () => {
+  const result = await runCli(['not-an-id']);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /__VAULT_RESULT__/);
+  assert.match(result.stdout, /"invalid-item-id"/);
+  assert.match(result.stderr, /Invalid eBay item ID/);
 });

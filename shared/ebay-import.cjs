@@ -232,7 +232,11 @@ const importEbayItems = async ({
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
-      const reason = writeResult.code === 'stale' ? 'stale-content' : 'unknown';
+      const reason = writeResult.code === 'stale'
+        ? 'stale-content'
+        : writeResult.code === 'locked'
+          ? 'locked'
+          : 'write-failed';
       cleanupWarnings(writeResult, false);
       logger.error(`❌ Failed to save data.json: ${writeResult.message}`);
       warnings.forEach((warning) => logger.error(`⚠️ ${warning}`));

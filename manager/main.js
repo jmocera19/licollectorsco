@@ -169,6 +169,10 @@ const normalizedImportMessage = (reason) => {
       return 'The eBay import timed out. Try again.';
     case 'stale-content':
       return 'data.json changed while the import was running. Reload the vault and try again.';
+    case 'locked':
+      return 'data.json is locked by another writer. Wait for it to finish, or follow the lock recovery instructions and try again.';
+    case 'write-failed':
+      return 'Could not save data.json. Check file permissions, disk space, and lock cleanup, then try again.';
     case 'invalid-response':
       return 'eBay returned an unexpected response. Try again.';
     default:
