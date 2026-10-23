@@ -37,7 +37,7 @@ const writeRoute = (routePath, seo, { url } = {}) => {
     }
 
     const markup = render(url);
-    if (markup.length < 1000 || !markup.includes('prose')) {
+    if (!markup.includes('class="prose')) {
       throw new Error(`Server rendering produced no article content for ${url}.`);
     }
     html = html.replace(EMPTY_ROOT, () => `<div id="root">${markup}</div>`);

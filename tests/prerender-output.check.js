@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readPostsFile } from '../shared/content.cjs';
+import { expectedArticleBody, escapedTitle, verifyArticleHtml } from '../scripts/article-output.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distPath = path.join(projectRoot, 'dist');
@@ -16,11 +17,9 @@ test('every article ships server-rendered content', () => {
       'utf8',
     );
 
-    assert.match(html, /<div id="root"><div/, `${post.slug} has app markup`);
-    assert.doesNotMatch(html, /<div id="root"><\/div>/, `${post.slug} is not an empty shell`);
-    assert.match(html, /class="prose/, `${post.slug} includes the article body`);
-    assert.match(html, /<h[2-3][^>]*>/, `${post.slug} includes rendered markdown headings`);
-    assert.ok(html.length > 10_000, `${post.slug} contains full article HTML`);
+    assert.deepEqual(verifyArticleHtml(html, post), [], `${post.slug} rendered correctly`);
+    assert.ok(html.includes(expectedArticleBody(post.body)), `${post.slug} includes its markdown body`);
+    assert.ok(html.includes(escapedTitle(post.title)), `${post.slug} includes its title`);
   }
 });
 
