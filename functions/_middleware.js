@@ -1,6 +1,6 @@
 const CANONICAL_HOST = 'licollectorsco.com';
 const BLOG_ROUTE_PATTERN = /^\/blog(?:\/[^/]+)?$/;
-const NOT_FOUND_PATH = '/404.html';
+const NOT_FOUND_PATH = '/404';
 const HTML_ACCEPT = /text\/html/i;
 
 const isNavigationRequest = (request) => request.method === 'GET'
@@ -8,17 +8,19 @@ const isNavigationRequest = (request) => request.method === 'GET'
 
 const notFoundResponse = async (context, url) => {
   const assetResponse = await context.env.ASSETS.fetch(new URL(NOT_FOUND_PATH, url));
-  if (assetResponse.status === 404) {
-    return new Response('Not Found', {
-      status: 404,
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
+  if (assetResponse.status === 200) {
+    const headers = new Headers(assetResponse.headers);
+    headers.delete('location');
+    return new Response(assetResponse.body, { status: 404, headers });
   }
 
-  return new Response(assetResponse.body, {
-    status: 404,
-    headers: assetResponse.headers,
-  });
+  return new Response(
+    '<!doctype html><meta name="robots" content="noindex"><title>Not Found</title><h1>Not Found</h1>',
+    {
+      status: 404,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    },
+  );
 };
 
 export async function onRequest(context) {
@@ -39,7 +41,7 @@ export async function onRequest(context) {
 
   if (BLOG_ROUTE_PATTERN.test(url.pathname)) {
     const assetUrl = new URL(url);
-    assetUrl.pathname = `${url.pathname}/index.html`;
+    assetUrl.pathname = `${url.pathname}/`;
 
     const assetResponse = await context.env.ASSETS.fetch(assetUrl);
     if (assetResponse.status !== 404) {
