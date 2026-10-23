@@ -161,6 +161,150 @@ test('transient lock cleanup failures are retried', async (t) => {
   assert.equal(fs.existsSync(lockPathFor(filePath)), false);
 });
 
+test('acquisition preserves the owner-write error and reports exhausted cleanup separately', async (t) => {
+  const { directory, filePath } = makeDataFile(t);
+  const before = fs.readFileSync(filePath, 'utf8');
+  const lockPath = lockPathFor(filePath);
+  const originalWrite = fs.writeFileSync;
+  const originalRemove = fs.rmSync;
+  let cleanupAttempts = 0;
+  t.mock.method(fs, 'writeFileSync', (target, ...args) => {
+    if (target === path.join(lockPath, 'owner.json')) {
+      throw Object.assign(new Error('Owner metadata write failed'), { code: 'ENOSPC' });
+    }
+    return originalWrite.call(fs, target, ...args);
+  });
+  t.mock.method(fs, 'rmSync', (target, ...args) => {
+    if (target === lockPath) {
+      cleanupAttempts += 1;
+      throw Object.assign(new Error('Acquisition cleanup busy'), { code: 'EBUSY' });
+    }
+    return originalRemove.call(fs, target, ...args);
+  });
+
+  const result = await acquireFileLock(filePath);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'lock-failed');
+  assert.equal(result.message, 'Owner metadata write failed');
+  assert.equal(result.errorCode, 'ENOSPC');
+  assert.equal(result.cleanup.code, 'cleanup-failed');
+  assert.equal(result.cleanup.message, 'Acquisition cleanup busy');
+  assert.equal(result.cleanup.errorCode, 'EBUSY');
+  assert.equal(result.cleanup.path, lockPath);
+  assert.equal(cleanupAttempts, 3);
+  assert.equal(fs.existsSync(lockPath), true);
+  assert.equal(fs.existsSync(path.join(lockPath, 'owner.json')), false);
+  assert.equal(fs.readFileSync(filePath, 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(directory).sort(), ['data.json', 'data.json.lock']);
+});
+
+test('atomic writes retain acquisition cleanup details without changing the destination', async (t) => {
+  const { directory, filePath } = makeDataFile(t);
+  const before = fs.readFileSync(filePath, 'utf8');
+  const lockPath = lockPathFor(filePath);
+  const originalWrite = fs.writeFileSync;
+  const originalRemove = fs.rmSync;
+  t.mock.method(fs, 'writeFileSync', (target, ...args) => {
+    if (target === path.join(lockPath, 'owner.json')) {
+      // A full disk may leave a partial owner file, not just an empty lock.
+      originalWrite.call(fs, target, '{"token":');
+      throw Object.assign(new Error('Partial owner metadata write failed'), { code: 'ENOSPC' });
+    }
+    return originalWrite.call(fs, target, ...args);
+  });
+  t.mock.method(fs, 'rmSync', (target, ...args) => {
+    if (target === lockPath) {
+      throw Object.assign(new Error('Acquisition cleanup busy'), { code: 'EBUSY' });
+    }
+    return originalRemove.call(fs, target, ...args);
+  });
+
+  const result = await writeJsonAtomic(filePath, { value: 9 });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'lock-failed');
+  assert.equal(result.message, 'Partial owner metadata write failed');
+  assert.equal(result.errorCode, 'ENOSPC');
+  assert.equal(result.cleanup.code, 'cleanup-failed');
+  assert.equal(result.cleanup.path, lockPath);
+  assert.equal(fs.readFileSync(filePath, 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(directory).sort(), ['data.json', 'data.json.lock']);
+});
+
+for (const partialOwner of [false, true]) {
+  for (const busyAttempts of [0, 1]) {
+    test(`owner-write failure cleans up ${partialOwner ? 'partial' : 'missing'} metadata after ${busyAttempts} busy attempts`, async (t) => {
+      const { directory, filePath } = makeDataFile(t);
+      const before = fs.readFileSync(filePath, 'utf8');
+      const lockPath = lockPathFor(filePath);
+      const originalWrite = fs.writeFileSync;
+      const originalRemove = fs.rmSync;
+      let cleanupAttempts = 0;
+      t.mock.method(fs, 'writeFileSync', (target, ...args) => {
+        if (target === path.join(lockPath, 'owner.json')) {
+          if (partialOwner) originalWrite.call(fs, target, '{"token":');
+          throw Object.assign(new Error('Owner metadata write failed'), { code: 'ENOSPC' });
+        }
+        return originalWrite.call(fs, target, ...args);
+      });
+      t.mock.method(fs, 'rmSync', (target, ...args) => {
+        if (target === lockPath && cleanupAttempts++ < busyAttempts) {
+          throw Object.assign(new Error('Acquisition cleanup busy'), { code: 'EBUSY' });
+        }
+        return originalRemove.call(fs, target, ...args);
+      });
+
+      const result = await writeJsonAtomic(filePath, { value: 9 });
+
+      assert.equal(result.ok, false, 'cleanup recovery must not turn acquisition failure into a saved write');
+      assert.equal(result.message, 'Owner metadata write failed');
+      assert.equal(result.errorCode, 'ENOSPC');
+      assert.equal(result.cleanup, undefined);
+      assert.equal(cleanupAttempts, busyAttempts + 1);
+      assert.equal(fs.existsSync(lockPath), false);
+      assert.equal(fs.readFileSync(filePath, 'utf8'), before);
+      assert.deepEqual(fs.readdirSync(directory), ['data.json']);
+    });
+  }
+}
+
+for (const hasOwner of [false, true]) {
+  test(`failed acquisition never removes a pre-existing ${hasOwner ? 'owned' : 'ownerless'} lock`, async (t) => {
+    const { filePath } = makeDataFile(t);
+    const before = fs.readFileSync(filePath, 'utf8');
+    const lockPath = lockPathFor(filePath);
+    const ownerPath = path.join(lockPath, 'owner.json');
+    fs.mkdirSync(lockPath);
+    const owner = JSON.stringify({ token: 'foreign', pid: 999999, createdAt: '2026-01-01T00:00:00.000Z' });
+    if (hasOwner) fs.writeFileSync(ownerPath, owner);
+    const originalWrite = fs.writeFileSync;
+    const originalRemove = fs.rmSync;
+    let ownerWrites = 0;
+    let cleanupAttempts = 0;
+    t.mock.method(fs, 'writeFileSync', (target, ...args) => {
+      if (target === ownerPath) ownerWrites += 1;
+      return originalWrite.call(fs, target, ...args);
+    });
+    t.mock.method(fs, 'rmSync', (target, ...args) => {
+      if (target === lockPath) cleanupAttempts += 1;
+      return originalRemove.call(fs, target, ...args);
+    });
+
+    const result = await writeJsonAtomic(filePath, { value: 9 }, { lockTimeoutMs: 0 });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'locked');
+    assert.equal(result.cleanup, undefined);
+    assert.equal(ownerWrites, 0);
+    assert.equal(cleanupAttempts, 0);
+    assert.equal(fs.existsSync(lockPath), true);
+    assert.equal(fs.readFileSync(filePath, 'utf8'), before);
+    if (hasOwner) assert.equal(fs.readFileSync(ownerPath, 'utf8'), owner);
+    else assert.equal(fs.existsSync(ownerPath), false);
+  });
+}
+
 test('persistent lock cleanup failure is reported as saved with cleanup required', async (t) => {
   const { filePath } = makeDataFile(t);
   const original = fs.rmSync;

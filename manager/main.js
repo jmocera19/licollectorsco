@@ -317,6 +317,9 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
     const result = await runNode(['scripts/add-to-vault.js', itemId]);
     const resultLine = parseVaultResultLine(result.stdout);
     const warnings = resultLine && Array.isArray(resultLine.warnings) ? resultLine.warnings : [];
+    // The renderer displays message on failure; warnings must not be available
+    // only in its developer console when a user needs to recover a lock.
+    const withWarnings = (message) => [message, ...warnings].join(' ');
 
     if (result.ok) {
       const failedEntry = resultLine
@@ -327,7 +330,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
           success: false,
           error: 'import-failed',
           reason: typeof failedEntry.reason === 'string' ? failedEntry.reason : 'unknown',
-          message: normalizedImportMessage(typeof failedEntry.reason === 'string' ? failedEntry.reason : 'unknown'),
+          message: withWarnings(normalizedImportMessage(typeof failedEntry.reason === 'string' ? failedEntry.reason : 'unknown')),
           detail: {
             stdoutTail: tailOutput(result.stdout),
             stderrTail: tailOutput(result.stderr),
@@ -344,7 +347,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
         return {
           success: false,
           error: 'verify-failed',
-          message: `The import script finished, but data.json could not be read: ${readResult.message}`,
+          message: withWarnings(`The import script finished, but data.json could not be read: ${readResult.message}`),
           ...(warnings.length ? { warnings } : {}),
         };
       }
@@ -355,7 +358,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
           success: false,
           error: 'import-failed',
           reason: importReasonFromResult(resultLine, result),
-          message: 'The import script finished, but the item was not found in the vault afterwards.',
+          message: withWarnings('The import script finished, but the item was not found in the vault afterwards.'),
           detail: {
             stdoutTail: tailOutput(result.stdout),
             stderrTail: tailOutput(result.stderr),
@@ -378,7 +381,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
       success: false,
       error: 'import-failed',
       reason,
-      message: normalizedImportMessage(reason),
+      message: withWarnings(normalizedImportMessage(reason)),
       detail: {
         stdoutTail: tailOutput(result.stdout),
         stderrTail: tailOutput(result.stderr),

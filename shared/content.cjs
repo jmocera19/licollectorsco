@@ -137,6 +137,28 @@ const readLockOwner = (lockPath) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Call only after this operation created the directory or verified its token.
+// Owner metadata can be missing or partially written during acquisition.
+const cleanupOwnedLock = async (lockPath) => {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      fs.rmSync(lockPath, { recursive: true, force: true });
+      return { ok: true };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await sleep(10);
+    }
+  }
+  return {
+    ok: false,
+    code: 'cleanup-failed',
+    message: lastError.message,
+    errorCode: lastError.code,
+    path: lockPath,
+  };
+};
+
 // Cross-process lock: mkdir is atomic, so only one writer can own the lock.
 // A lock is never removed automatically: a crashed owner may still be alive,
 // and reclaiming it requires confirming that no writer is active.
@@ -158,8 +180,16 @@ const acquireFileLock = async (filePath, {
           'utf8',
         );
       } catch (error) {
-        fs.rmSync(lockPath, { recursive: true, force: true });
-        return { ok: false, code: 'lock-failed', message: error.message };
+        // mkdir succeeded, so this directory is ours even without owner.json.
+        // A cleanup error must never replace the original acquisition error.
+        const cleanup = await cleanupOwnedLock(lockPath);
+        return {
+          ok: false,
+          code: 'lock-failed',
+          message: error.message,
+          errorCode: error.code,
+          ...(cleanup.ok ? {} : { cleanup }),
+        };
       }
 
       return {
@@ -176,23 +206,7 @@ const acquireFileLock = async (filePath, {
             };
           }
 
-          let lastError;
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            try {
-              fs.rmSync(lockPath, { recursive: true, force: true });
-              return { ok: true };
-            } catch (error) {
-              lastError = error;
-              if (attempt < 2) await sleep(10);
-            }
-          }
-
-          return {
-            ok: false,
-            code: 'cleanup-failed',
-            message: lastError.message,
-            path: lockPath,
-          };
+          return cleanupOwnedLock(lockPath);
         },
       };
     } catch (error) {
@@ -318,7 +332,7 @@ const writeWithoutLock = async (filePath, value, { expectedFingerprint } = {}) =
 const writeJsonAtomic = async (filePath, value, { expectedFingerprint, lockTimeoutMs } = {}) => {
   const lock = await acquireFileLock(filePath, { timeoutMs: lockTimeoutMs });
   if (!lock.ok) {
-    return { ok: false, code: lock.code, message: lock.message, owner: lock.owner };
+    return lock;
   }
 
   let result;
