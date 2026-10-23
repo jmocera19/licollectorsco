@@ -1,5 +1,7 @@
-import { useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { DEFAULT_IMAGE, type SeoData } from '../../shared/seo.js';
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 const ensureMeta = (key: string, attribute: 'name' | 'property', value: string) => {
   let element = document.head.querySelector<HTMLMetaElement>(`meta[data-seo="${key}"]`);
@@ -42,7 +44,7 @@ const Seo = ({ seo }: { seo: SeoData }) => {
     structuredData,
   } = seo;
 
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     document.title = title;
 
     setMeta('description', 'name', 'description', description);

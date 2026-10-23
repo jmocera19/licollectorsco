@@ -13,8 +13,8 @@ import { motion, useScroll, useSpring } from 'framer-motion';
 import { initGA, useAnalytics } from './utils/useAnalytics';
 import { homeSeo } from '../shared/seo.js';
 
-// Initialize the GA layer once at root
-initGA();
+// Initialize the GA layer once in the browser; SSR has no window.
+if (typeof window !== 'undefined') initGA();
 
 const HOME_SEO = homeSeo();
 

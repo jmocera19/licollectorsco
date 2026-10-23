@@ -6,8 +6,9 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
 ## Commands
 
 - `npm run build` is the primary verification step: `tsc -b` (typecheck) → `vite build` →
-  prerender blog SEO pages. There is no CI. Use `npm run build` plus `npm test` to verify
-  changes. `npm test` runs the Node behavior tests in `tests/`.
+  `vite build --ssr` → prerender article HTML and metadata. There is no CI. Use
+  `npm run build` plus `npm test` to verify changes. `npm test` runs the Node behavior
+  tests in `tests/`.
 - `prebuild` auto-runs `generate:sitemap`, which regenerates `public/sitemap.xml` from
   `src/posts.json` — never hand-edit the sitemap.
 - `npm run lint` — ESLint over `**/*.{ts,tsx}` only; manager and script JavaScript files
@@ -20,6 +21,10 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
 - `src/posts.json` is the single source of blog content (markdown in `body`, rendered by
   `src/pages/BlogPost.tsx` via react-markdown). New posts need no code changes — build
   scripts pick them up automatically.
+- `src/entry-server.tsx` server-renders `/blog/:slug`; `scripts/prerender-pages.js` injects
+  that markup into each article's `#root`. `src/main.tsx` hydrates when markup exists and
+  otherwise mounts normally. Article motion wrappers use `initial={false}` so text is
+  visible without JavaScript. Home, `/blog`, and `404.html` remain metadata-only.
 - `shared/seo.js` is the single source of titles, canonical URLs, social tags, and JSON-LD.
   The browser (`src/components/Seo.tsx`) and build scripts (`scripts/prerender-pages.js`,
   `scripts/generate-sitemap.js`) both import it. Change metadata there, not in page

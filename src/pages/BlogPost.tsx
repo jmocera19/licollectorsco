@@ -47,7 +47,7 @@ const BlogPost = () => {
       <div className="max-w-3xl mx-auto">
         {/* Back link */}
         <motion.div
-          initial={{ opacity: 0, x: -10 }}
+          initial={false}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4 }}
           className="mb-10"
@@ -59,7 +59,7 @@ const BlogPost = () => {
 
         {/* Article Header */}
         <motion.header
-          initial={{ opacity: 0, y: 20 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
           className="mb-12"
@@ -89,7 +89,7 @@ const BlogPost = () => {
 
         {/* Article Body */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
           className="prose prose-invert prose-lg max-w-none
