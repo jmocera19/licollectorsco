@@ -90,10 +90,12 @@ test('static rendering escapes markup and only adds publication date for article
   assert.doesNotMatch(homeBlock, /article:published_time/);
 });
 
-test('missing-post metadata is noindex and does not emit JSON-LD', () => {
+test('missing-post metadata is noindex and does not emit canonical or JSON-LD', () => {
   const seo = notFoundSeo('gone');
 
   assert.equal(seo.noIndex, true);
+  assert.equal(seo.canonicalUrl, undefined);
   assert.equal(seo.structuredData, undefined);
   assert.match(renderSeoBlock(seo), /content="noindex, follow"/);
+  assert.doesNotMatch(renderSeoBlock(seo), /rel="canonical"/);
 });

@@ -7,6 +7,7 @@ import {
   homeSeo,
   blogSeo,
   articleSeo,
+  notFoundSeo,
 } from '../shared/seo.js';
 import { readPostsFile } from '../shared/content.cjs';
 
@@ -47,4 +48,11 @@ fs.writeFileSync(
   'utf8',
 );
 
-console.log(`✅ Pre-rendered metadata for ${posts.length + 2} routes.`);
+// Cloudflare Pages serves this document for unmatched routes.
+fs.writeFileSync(
+  path.join(distPath, '404.html'),
+  template.replace(SEO_BLOCK_PATTERN, renderSeoBlock(notFoundSeo())),
+  'utf8',
+);
+
+console.log(`✅ Pre-rendered metadata for ${posts.length + 2} routes plus 404.html.`);

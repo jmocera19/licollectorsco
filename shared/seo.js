@@ -37,12 +37,6 @@ const organizationRef = () => ({
   url: `${SITE_URL}/`,
 });
 
-/** @param {string} routePath */
-const canonicalUrl = (routePath) => {
-  if (!routePath || routePath === '/') return `${SITE_URL}/`;
-  return `${SITE_URL}${routePath.startsWith('/') ? routePath : `/${routePath}`}`;
-};
-
 const homeStructuredData = () => ({
   '@context': 'https://schema.org',
   '@type': 'Store',
@@ -139,12 +133,11 @@ export const articleSeo = (post) => {
   };
 };
 
-/** @param {string | undefined} slug */
-export const notFoundSeo = (slug) => ({
-  title: 'Post Not Found | Long Island Collectors Co.',
-  description: 'The requested article could not be found.',
-  path: slug ? `/blog/${slug}` : '/blog',
-  canonicalUrl: canonicalUrl(slug ? `/blog/${slug}` : '/blog'),
+/** @param {string} [path] */
+export const notFoundSeo = (path = '/') => ({
+  title: 'Page Not Found | Long Island Collectors Co.',
+  description: 'The page you are looking for does not exist or may have been removed.',
+  path,
   type: 'website',
   noIndex: true,
 });
@@ -164,8 +157,8 @@ export const SEO_BLOCK_PATTERN = /<!-- SEO:START -->[\s\S]*?<!-- SEO:END -->/;
 export const renderSeoBlock = (seo) => `<!-- SEO:START -->
     <title data-seo="title">${escapeHtml(seo.title)}</title>
     <meta data-seo="description" name="description" content="${escapeHtml(seo.description)}" />
-    <meta data-seo="robots" name="robots" content="${seo.noIndex ? 'noindex, follow' : 'index, follow'}" />
-    <link data-seo="canonical" rel="canonical" href="${escapeHtml(seo.canonicalUrl)}" />
+    <meta data-seo="robots" name="robots" content="${seo.noIndex ? 'noindex, follow' : 'index, follow'}" />${seo.canonicalUrl ? `
+    <link data-seo="canonical" rel="canonical" href="${escapeHtml(seo.canonicalUrl)}" />` : ''}
     <meta data-seo="og-type" property="og:type" content="${seo.type}" />
     <meta data-seo="og-url" property="og:url" content="${escapeHtml(seo.canonicalUrl)}" />
     <meta data-seo="og-title" property="og:title" content="${escapeHtml(seo.title)}" />

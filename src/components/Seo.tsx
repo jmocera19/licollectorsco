@@ -63,13 +63,17 @@ const Seo = ({ seo }: { seo: SeoData }) => {
     setMeta('article-published-time', 'property', 'article:published_time', publishedTime);
 
     let canonical = document.head.querySelector<HTMLLinkElement>('link[data-seo="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement('link');
-      canonical.dataset.seo = 'canonical';
-      canonical.rel = 'canonical';
-      document.head.appendChild(canonical);
+    if (canonicalUrl) {
+      if (!canonical) {
+        canonical = document.createElement('link');
+        canonical.dataset.seo = 'canonical';
+        canonical.rel = 'canonical';
+        document.head.appendChild(canonical);
+      }
+      canonical.href = canonicalUrl;
+    } else {
+      canonical?.remove();
     }
-    canonical.href = canonicalUrl;
 
     let jsonLd = document.head.querySelector<HTMLScriptElement>('script[data-seo="structured-data"]');
     if (structuredData) {

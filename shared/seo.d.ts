@@ -4,7 +4,7 @@ export interface SeoData {
   title: string;
   description: string;
   path: string;
-  canonicalUrl: string;
+  canonicalUrl?: string;
   type: SeoType;
   publishedTime?: string;
   noIndex?: boolean;
@@ -30,5 +30,5 @@ export const SEO_BLOCK_PATTERN: RegExp;
 export function homeSeo(): SeoData;
 export function blogSeo(posts: ReadonlyArray<SeoPost>): SeoData;
 export function articleSeo(post: SeoPost): SeoData;
-export function notFoundSeo(slug: string | undefined): SeoData;
+export function notFoundSeo(path?: string): SeoData;
 export function renderSeoBlock(seo: SeoData): string;

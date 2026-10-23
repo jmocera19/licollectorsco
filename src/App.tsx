@@ -7,6 +7,7 @@ import GradingInfo from './components/GradingInfo';
 import AboutUs from './components/AboutUs';
 import BlogIndex from './pages/BlogIndex';
 import BlogPost from './pages/BlogPost';
+import NotFound from './pages/NotFound';
 import Seo from './components/Seo';
 import { motion, useScroll, useSpring } from 'framer-motion';
 import { initGA, useAnalytics } from './utils/useAnalytics';
@@ -53,6 +54,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/blog" element={<BlogIndex />} />
         <Route path="/blog/:slug" element={<BlogPost />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       
       <footer className="bg-[#050c18] border-t border-gold/20 py-10 text-center flex flex-col items-center gap-4">

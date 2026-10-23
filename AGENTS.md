@@ -81,4 +81,7 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
 - **Check `git status --short` before staging anything. Never stage or commit unrelated
   changes.**
 - `functions/_middleware.js` is a Pages Function: 301s `www`→apex, strips trailing
-  slashes, and serves prerendered `/blog/**/index.html` directly instead of SPA fallback.
+  slashes, serves prerendered `/blog/**/index.html` directly, and returns `404.html` with
+  status 404 for other page navigations. Non-HTML requests pass through to assets.
+  `scripts/prerender-pages.js` writes that noindex `dist/404.html`; `src/App.tsx` has a
+  catch-all route for client-side navigation to unknown pages.
