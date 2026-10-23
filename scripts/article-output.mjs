@@ -70,9 +70,10 @@ const inside = (node, ancestor) => {
 
 const hidden = (node) => {
   for (let current = node; current; current = current.parentNode) {
-    if (attribute(current, 'hidden') !== undefined
+    if (current.tagName === 'template'
+      || attribute(current, 'hidden') !== undefined
       || attribute(current, 'aria-hidden')?.trim().toLowerCase() === 'true'
-      || /(?:^|\s)(?:hidden|invisible|sr-only)(?:\s|$)/.test(attribute(current, 'class') || '')) return true;
+      || /(?:^|\s)(?:hidden|invisible|sr-only|opacity-0)(?:\s|$)/.test(attribute(current, 'class') || '')) return true;
 
     const style = (attribute(current, 'style') || '').replace(/\/\*[\s\S]*?\*\//g, '');
     for (const declaration of style.split(';')) {

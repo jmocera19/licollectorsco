@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build, normalizePath } from 'vite';
+import { parse } from 'parse5';
 import { readPostsFile } from '../shared/content.cjs';
 import { prerenderSite } from '../scripts/prerender-site.mjs';
 import { verifyArticleDocument } from '../scripts/article-output.mjs';
@@ -71,6 +72,27 @@ test('production prerendering verifies fixture articles end to end', { timeout: 
     });
   }
 
+  await t.test('rejects an inert template body even when its complete prose tree matches', () => {
+    const post = posts.find(({ slug }) => slug === 'short');
+    const html = htmlFor(post.slug);
+    const document = parse(html, { sourceCodeLocationInfo: true });
+    const findBody = (node) => {
+      if (node.attrs?.some(({ name, value }) => name === 'data-article' && value === 'body')) return node;
+      return (node.childNodes || []).map(findBody).find(Boolean);
+    };
+    const { startTag, endTag } = findBody(document).sourceCodeLocation;
+    // Change only the prose wrapper, preserving the entire rendered subtree
+    // and metadata. Parser offsets avoid replacing an unrelated closing div.
+    const changed = html.slice(0, startTag.startOffset)
+      + html.slice(startTag.startOffset, startTag.endOffset).replace(/^<div\b/, '<template')
+      + html.slice(startTag.endOffset, endTag.startOffset)
+      + '</template>' + html.slice(endTag.endOffset);
+    assert.notEqual(changed, html, 'mutation must change the document');
+    const problems = verifyArticleDocument(changed, post);
+    assert.ok(problems.includes('article body must be visible inside the article'));
+    assert.ok(!problems.includes('article body content does not match'), 'typed comparison must still preserve template contents');
+  });
+
   await t.test('heading text cannot be supplied by hidden descendants', () => {
     const post = posts.find(({ slug }) => slug === 'short');
     const html = htmlFor(post.slug);
@@ -91,6 +113,17 @@ test('production prerendering verifies fixture articles end to end', { timeout: 
     ['wrong heading with matching metadata', 'short', (html) => html.replace(/(<h1 data-article="title"[^>]*>)[\s\S]*?(<\/h1>)/, '$1Different heading$2')],
     ['hidden heading substitute', 'short', (html) => html.replace(/<h1 data-article="title"[^>]*>[\s\S]*?<\/h1>/, '<span hidden data-article="title">Brief</span>')],
     ['hidden article ancestor', 'short', (html) => html.replace('<div id="root">', '<div id="root" hidden>')],
+    ['opacity-0 app root', 'short', (html) => html.replace('<div id="root">', '<div id="root" class="opacity-0">')],
+    ['opacity-0 article', 'short', (html) => html.replace('data-article="page" class="', 'data-article="page" class="opacity-0 ')],
+    ['opacity-0 heading', 'short', (html) => html.replace('data-article="title" class="', 'data-article="title" class="opacity-0 ')],
+    ['opacity-0 body', 'short', (html) => html
+      .replace('data-article="body" class="', 'data-article="body" class="opacity-0 ')
+      // Remove Motion's inline opacity:1 so the utility really hides the body.
+      .replace(/(<div data-article="body"[^>]*?) style="[^"]*"/, '$1')],
+    ['opacity-0 heading ancestor', 'short', (html) => html.replace(/<header\b[^>]*>/, (tag) => tag
+      .replace('class="', 'class="opacity-0 ')
+      .replace(/ style="[^"]*"/, ''))],
+    ['opacity-0 heading descendant', 'short', (html) => html.replace(/(<h1 data-article="title"[^>]*>)[\s\S]*?(<\/h1>)/, '$1<span class="opacity-0">Brief</span>$2')],
     ['misplaced title marker', 'short', (html) => {
       const [heading] = html.match(/<h1 data-article="title"[^>]*>[\s\S]*?<\/h1>/);
       return html.replace(heading, '').replace('</section>', () => `</section>${heading}`);

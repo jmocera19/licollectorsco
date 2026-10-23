@@ -72,6 +72,14 @@ test('article markers must identify visible content inside the app and article',
   }
 });
 
+test('opacity hiding checks match only the bare opacity-0 class token', () => {
+  const post = { title: 'Visible heading', body: 'Visible body.' };
+  for (const className of ['opacity-100', 'md:opacity-0', 'group-hover:opacity-0', 'not-opacity-0']) {
+    const html = page(post).replace('<div id="root">', `<div id="root" class="${className}">`);
+    assert.deepEqual(verifyArticleHtml(html, post), [], className);
+  }
+});
+
 test('a wrong visible heading is rejected even when metadata matches', () => {
   const target = { title: 'Target Title', body: 'Shared opening.' };
   const wrongRoute = { title: 'Different Heading', body: 'Shared opening.' };
