@@ -4,11 +4,11 @@ import { expectedArticleBody, escapedTitle, verifyArticleHtml } from '../scripts
 
 const page = (post) => [
   '<!doctype html><html><body>',
-  '<div id="root"><div><h1>',
+  '<section data-article="page"><h1 data-article="title">',
   escapedTitle(post.title),
-  '</h1><div class="prose prose-invert">',
+  '</h1><div data-article="body" class="prose prose-invert">',
   expectedArticleBody(post.body),
-  '</div></div></div>',
+  '</div></section>',
   '</body></html>',
 ].join('');
 
@@ -26,14 +26,55 @@ test('H1-only and very short articles pass content verification', () => {
   assert.deepEqual(verifyArticleHtml(page(short), short), []);
 });
 
-test('missing or wrong rendered content still fails verification', () => {
-  const post = { title: 'Expected Title', body: 'Expected body text.' };
-  const wrongBody = { title: post.title, body: 'Different body text.' };
+test('hard breaks and literal HTML compare correctly against SSR', () => {
+  const hardBreak = { title: 'Hard Break', body: 'Hard  \nbreak.' };
+  const literalHtml = { title: 'Literal HTML', body: 'Text <b>literal tag</b> after.' };
 
-  assert.ok(verifyArticleHtml(page(wrongBody), post).includes('missing article body content'));
-  assert.ok(verifyArticleHtml('<div id="root"></div>', post).includes('missing app markup'));
-  assert.ok(verifyArticleHtml(
-    `<div id="root"><div><div class="prose">${expectedArticleBody(post.body)}</div></div></div>`,
-    post,
-  ).includes('missing article title'));
+  assert.deepEqual(verifyArticleHtml(page(hardBreak), hardBreak), []);
+  assert.deepEqual(verifyArticleHtml(page(literalHtml), literalHtml), []);
+});
+
+test('a wrong visible heading is rejected even when metadata matches', () => {
+  const target = { title: 'Target Title', body: 'Shared opening.' };
+  const wrongRoute = { title: 'Different Heading', body: 'Shared opening.' };
+
+  assert.ok(
+    verifyArticleHtml(page(wrongRoute), target).includes('article title does not match'),
+  );
+});
+
+test('a different article sharing a paragraph is rejected', () => {
+  const target = { title: 'Target Title', body: 'Shared opening.' };
+  const wrongRoute = {
+    title: 'Target Title',
+    body: 'Shared opening.\n\n## Different article\n\nUnrelated content.',
+  };
+
+  assert.ok(
+    verifyArticleHtml(page(wrongRoute), target).includes('article body content does not match'),
+  );
+});
+
+test('truncated and extended bodies are rejected', () => {
+  const post = { title: 'Expected', body: 'First paragraph.\n\nSecond paragraph.' };
+  const truncated = { title: post.title, body: 'First paragraph.' };
+  const extended = { title: post.title, body: `${post.body}\n\nExtra paragraph.` };
+
+  assert.ok(verifyArticleHtml(page(truncated), post).includes('article body content does not match'));
+  assert.ok(verifyArticleHtml(page(extended), post).includes('article body content does not match'));
+});
+
+test('missing markers and missing prose styling are rejected', () => {
+  const post = { title: 'Expected', body: 'Body.' };
+  const noMarkers = '<div id="root"></div>';
+
+  assert.deepEqual(verifyArticleHtml(noMarkers, post), [
+    'article page marker is missing or duplicated',
+    'article title marker is missing or duplicated',
+    'article body marker is missing or duplicated',
+  ]);
+  assert.ok(
+    verifyArticleHtml(page(post).replace('class="prose prose-invert"', ''), post)
+      .includes('article body wrapper is missing'),
+  );
 });

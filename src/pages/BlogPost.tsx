@@ -41,7 +41,7 @@ const BlogPost = () => {
   });
 
   return (
-    <section className="min-h-screen bg-navy py-24 px-4">
+    <section data-article="page" className="min-h-screen bg-navy py-24 px-4">
       <Seo seo={seo} />
 
       <div className="max-w-3xl mx-auto">
@@ -76,7 +76,7 @@ const BlogPost = () => {
             ))}
           </div>
 
-          <h1 className="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-4">
+          <h1 data-article="title" className="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-4">
             {post.title}
           </h1>
 
@@ -89,6 +89,7 @@ const BlogPost = () => {
 
         {/* Article Body */}
         <motion.div
+          data-article="body"
           initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
