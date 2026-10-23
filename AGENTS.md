@@ -36,7 +36,9 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
   - `grading` — title and description for the grading services section
   Preserve all three sections when editing this file.
 - Manage vault items via `node scripts/add-to-vault.js <eBayItemIds...>` (requires `.env`
-  with `EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`) or the manager app.
+  with `EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`) or the manager app. The reusable importer
+  is `shared/ebay-import.cjs`; the CLI only loads `.env`, prints progress, and emits the
+  `__VAULT_RESULT__` summary line the Manager parses.
 - `scripts/prerender-pages.js` string-replaces the `<!-- SEO:START -->…<!-- SEO:END -->`
   block in `index.html` to write static `index.html` files for `/blog` and every post
   slug. The build FAILS if the markers are missing — do not remove them.
