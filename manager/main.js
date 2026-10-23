@@ -256,7 +256,7 @@ ipcMain.handle('remove-vault-item', async (event, targetId) => runMutation(
       };
     }
 
-    const writeResult = writeJsonAtomic(dataPath, removal.data, {
+    const writeResult = await writeJsonAtomic(dataPath, removal.data, {
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
@@ -419,7 +419,7 @@ ipcMain.handle('publish-post', async (event, post, options) => runMutation(
       };
     }
 
-    const writeResult = writeJsonAtomic(postsPath, outcome.data, {
+    const writeResult = await writeJsonAtomic(postsPath, outcome.data, {
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
@@ -469,7 +469,7 @@ ipcMain.handle('delete-post', async (event, slug) => runMutation(
       };
     }
 
-    const writeResult = writeJsonAtomic(postsPath, deletion.data, {
+    const writeResult = await writeJsonAtomic(postsPath, deletion.data, {
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {

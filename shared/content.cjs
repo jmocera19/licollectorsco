@@ -122,6 +122,83 @@ const validateVaultData = (data) => {
 
 const fingerprint = (raw) => crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
 
+const LOCK_TIMEOUT_MS = 5000;
+const LOCK_RETRY_MS = 25;
+
+const lockPathFor = (filePath) => `${filePath}.lock`;
+
+const readLockOwner = (lockPath) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(lockPath, 'owner.json'), 'utf8'));
+  } catch (error) {
+    return null;
+  }
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Cross-process lock: mkdir is atomic, so only one writer can own the lock.
+// A lock is never removed automatically: a crashed owner may still be alive,
+// and reclaiming it requires confirming that no writer is active.
+const acquireFileLock = async (filePath, {
+  timeoutMs = LOCK_TIMEOUT_MS,
+  retryMs = LOCK_RETRY_MS,
+} = {}) => {
+  const lockPath = lockPathFor(filePath);
+  const token = crypto.randomBytes(16).toString('hex');
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    try {
+      fs.mkdirSync(lockPath);
+      try {
+        fs.writeFileSync(
+          path.join(lockPath, 'owner.json'),
+          JSON.stringify({ token, pid: process.pid, createdAt: new Date().toISOString() }),
+          'utf8',
+        );
+      } catch (error) {
+        fs.rmSync(lockPath, { recursive: true, force: true });
+        return { ok: false, code: 'lock-failed', message: error.message };
+      }
+
+      return {
+        ok: true,
+        path: lockPath,
+        release() {
+          const owner = readLockOwner(lockPath);
+          if (!owner || owner.token !== token) return false;
+          try {
+            fs.rmSync(lockPath, { recursive: true, force: true });
+            return true;
+          } catch (error) {
+            return false;
+          }
+        },
+      };
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        return { ok: false, code: 'lock-failed', message: error.message };
+      }
+
+      if (Date.now() >= deadline) {
+        const owner = readLockOwner(lockPath);
+        const ownerDetail = owner
+          ? ` Held by PID ${owner.pid} since ${owner.createdAt}.`
+          : '';
+        return {
+          ok: false,
+          code: 'locked',
+          owner,
+          message: `Another writer is using ${path.basename(filePath)}.${ownerDetail} If no writer is active, confirm and remove ${lockPath}.`,
+        };
+      }
+
+      await sleep(retryMs);
+    }
+  }
+};
+
 const readJsonFile = (filePath, validateShape) => {
   let raw;
   try {
@@ -154,46 +231,55 @@ const readPostsFile = (filePath) => {
 };
 
 // Atomic JSON write: unique temp file in the destination directory, then a
-// same-volume rename (Windows: MoveFileEx REPLACE_EXISTING). On failure only
-// this operation's own temp file is removed and the destination is untouched.
-// When expectedFingerprint is supplied, the destination is re-read first so a
-// concurrent edit is rejected instead of silently overwritten.
-const writeJsonAtomic = (filePath, value, { expectedFingerprint } = {}) => {
-  if (expectedFingerprint !== undefined) {
-    let current;
-    try {
-      current = fs.readFileSync(filePath, 'utf8');
-    } catch (error) {
-      return {
-        ok: false,
-        code: error.code === 'ENOENT' ? 'missing' : 'read-failed',
-        message: error.message,
-      };
-    }
-    if (fingerprint(current) !== expectedFingerprint) {
-      return {
-        ok: false,
-        code: 'stale',
-        message: 'The file changed after it was read. Reload the content and retry.',
-      };
-    }
+// same-volume rename (Windows: MoveFileEx REPLACE_EXISTING). Coordination uses
+// a per-file lock so fingerprint comparison and replacement are one critical
+// section across Manager and CLI processes. On failure only this operation's
+// own temp file is removed and the destination is untouched.
+const writeJsonAtomic = async (filePath, value, { expectedFingerprint, lockTimeoutMs } = {}) => {
+  const lock = await acquireFileLock(filePath, { timeoutMs: lockTimeoutMs });
+  if (!lock.ok) {
+    return { ok: false, code: lock.code, message: lock.message, owner: lock.owner };
   }
 
-  const temporaryPath = path.join(
-    path.dirname(filePath),
-    `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
-  );
   try {
-    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
-    fs.renameSync(temporaryPath, filePath);
-    return { ok: true };
-  } catch (error) {
-    try {
-      fs.unlinkSync(temporaryPath);
-    } catch (cleanupError) {
-      /* only the operation's own temp file is targeted */
+    if (expectedFingerprint !== undefined) {
+      let current;
+      try {
+        current = fs.readFileSync(filePath, 'utf8');
+      } catch (error) {
+        return {
+          ok: false,
+          code: error.code === 'ENOENT' ? 'missing' : 'read-failed',
+          message: error.message,
+        };
+      }
+      if (fingerprint(current) !== expectedFingerprint) {
+        return {
+          ok: false,
+          code: 'stale',
+          message: 'The file changed after it was read. Reload the content and retry.',
+        };
+      }
     }
-    return { ok: false, message: error.message, code: error.code };
+
+    const temporaryPath = path.join(
+      path.dirname(filePath),
+      `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
+    );
+    try {
+      fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
+      fs.renameSync(temporaryPath, filePath);
+      return { ok: true };
+    } catch (error) {
+      try {
+        fs.unlinkSync(temporaryPath);
+      } catch (cleanupError) {
+        /* only the operation's own temp file is targeted */
+      }
+      return { ok: false, message: error.message, code: error.code };
+    }
+  } finally {
+    lock.release();
   }
 };
 
@@ -276,6 +362,8 @@ module.exports = {
   validatePostsData,
   validateVaultData,
   fingerprint,
+  acquireFileLock,
+  lockPathFor,
   readJsonFile,
   readPostsFile,
   writeJsonAtomic,

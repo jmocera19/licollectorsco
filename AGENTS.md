@@ -34,6 +34,9 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
   (`manager/main.js`) and scripts (`scripts/add-to-vault.js`, `scripts/prerender-pages.js`,
   `scripts/generate-sitemap.js`) all use it. Builds fail on invalid `src/posts.json`, and
   Manager saves reject a file that changed after it was read instead of overwriting it.
+  Writers coordinate through a per-file `<file>.lock` directory; a held or orphaned lock
+  is reported with its owner PID and must not be removed unless no writer is active.
+  Only processes using this contract are coordinated; external editors are not.
 - `src/data.json` holds site content:
   - `vault` — eBay "vault" items (rendered by `src/components/Vault.tsx`)
   - `livestream` — the `isLive` flag, platform, and stream URL (used by

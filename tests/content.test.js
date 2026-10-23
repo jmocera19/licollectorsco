@@ -135,20 +135,20 @@ test('vault operations preserve livestream and grading sections', () => {
   assert.deepEqual(removed.data.vault.map((item) => item.id), ['222222222']);
 });
 
-test('atomic writes reject a stale snapshot instead of overwriting it', (t) => {
+test('atomic writes reject a stale snapshot instead of overwriting it', async (t) => {
   const filePath = tempFile(t, JSON.stringify({ value: 1 }));
   const snapshot = readJsonFile(filePath, () => null);
 
   assert.equal(snapshot.status, 'ok');
   fs.writeFileSync(filePath, JSON.stringify({ value: 2 }), 'utf8');
 
-  const stale = writeJsonAtomic(filePath, { value: 3 }, { expectedFingerprint: snapshot.fingerprint });
+  const stale = await writeJsonAtomic(filePath, { value: 3 }, { expectedFingerprint: snapshot.fingerprint });
   assert.equal(stale.ok, false);
   assert.equal(stale.code, 'stale');
   assert.deepEqual(JSON.parse(fs.readFileSync(filePath, 'utf8')), { value: 2 });
 
   const current = readJsonFile(filePath, () => null);
-  const written = writeJsonAtomic(filePath, { value: 4 }, { expectedFingerprint: current.fingerprint });
+  const written = await writeJsonAtomic(filePath, { value: 4 }, { expectedFingerprint: current.fingerprint });
   assert.equal(written.ok, true);
   assert.deepEqual(JSON.parse(fs.readFileSync(filePath, 'utf8')), { value: 4 });
 });
@@ -161,11 +161,11 @@ test('build readers fail loudly on invalid post data', (t) => {
   assert.throws(() => readPostsFile(invalid), /body/);
 });
 
-test('failed atomic writes leave no temporary files behind', (t) => {
+test('failed atomic writes leave no temporary files behind', async (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lico-content-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
-  const result = writeJsonAtomic(path.join(directory, 'missing', 'content.json'), { value: 1 });
+  const result = await writeJsonAtomic(path.join(directory, 'missing', 'content.json'), { value: 1 });
 
   assert.equal(result.ok, false);
   assert.deepEqual(fs.readdirSync(directory), []);

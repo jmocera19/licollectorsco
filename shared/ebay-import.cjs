@@ -217,7 +217,7 @@ const importEbayItems = async ({
       return { added, failed };
     }
 
-    const writeResult = writeJsonAtomic(dataPath, dataContent, {
+    const writeResult = await writeJsonAtomic(dataPath, dataContent, {
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
