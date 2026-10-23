@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readPostsFile } from '../shared/content.cjs';
-import { expectedArticleBody, escapedTitle, verifyArticleHtml } from '../scripts/article-output.mjs';
+import { verifyArticleDocument } from '../scripts/article-output.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distPath = path.join(projectRoot, 'dist');
@@ -17,9 +17,7 @@ test('every article ships server-rendered content', () => {
       'utf8',
     );
 
-    assert.deepEqual(verifyArticleHtml(html, post), [], `${post.slug} rendered correctly`);
-    assert.ok(html.includes(expectedArticleBody(post.body)), `${post.slug} includes its markdown body`);
-    assert.ok(html.includes(escapedTitle(post.title)), `${post.slug} includes its title`);
+    assert.deepEqual(verifyArticleDocument(html, post), [], `${post.slug} rendered correctly`);
   }
 });
 

@@ -4,11 +4,11 @@ import { expectedArticleBody, escapedTitle, verifyArticleHtml } from '../scripts
 
 const page = (post) => [
   '<!doctype html><html><body>',
-  '<section data-article="page"><h1 data-article="title">',
+  '<div id="root"><section data-article="page"><h1 data-article="title">',
   escapedTitle(post.title),
   '</h1><div data-article="body" class="prose prose-invert">',
   expectedArticleBody(post.body),
-  '</div></section>',
+  '</div></section></div>',
   '</body></html>',
 ].join('');
 
@@ -32,6 +32,44 @@ test('hard breaks and literal HTML compare correctly against SSR', () => {
 
   assert.deepEqual(verifyArticleHtml(page(hardBreak), hardBreak), []);
   assert.deepEqual(verifyArticleHtml(page(literalHtml), literalHtml), []);
+});
+
+test('literal element text is not interchangeable with actual markup', () => {
+  const post = { title: 'Literal tags', body: 'Text <em>literal tag</em> after.' };
+  const changed = page(post).replace(
+    expectedArticleBody(post.body),
+    '<p>Text <em>literal tag</em> after.</p>',
+  );
+
+  assert.ok(verifyArticleHtml(changed, post).includes('article body content does not match'));
+});
+
+test('article markers must identify visible content inside the app and article', () => {
+  const post = { title: 'Visible heading', body: 'Visible body.' };
+  const html = page(post);
+  const heading = `<h1 data-article="title">${post.title}</h1>`;
+  const body = `<div data-article="body" class="prose prose-invert">${expectedArticleBody(post.body)}</div>`;
+  const cases = {
+    'hidden heading substitute': html.replace(heading, `<span hidden data-article="title">${post.title}</span>`),
+    'wrong heading level': html.replace(heading, `<h2 data-article="title">${post.title}</h2>`),
+    'hidden heading': html.replace('<h1 data-article', '<h1 hidden data-article'),
+    'hidden body': html.replace('<div data-article="body"', '<div hidden data-article="body"'),
+    'hidden ancestor': html.replace('<div id="root">', '<div id="root" hidden>'),
+    'ARIA-hidden ancestor': html.replace('<section data-article', '<section aria-hidden="true" data-article'),
+    'display-none ancestor': html.replace('<section data-article', '<section style="display: none !important" data-article'),
+    'invisible body': html.replace('class="prose prose-invert"', 'class="prose invisible"'),
+    'zero-opacity heading': html.replace('<h1 data-article', '<h1 style="opacity: 0" data-article'),
+    'heading outside article': html.replace(heading, '').replace('</section>', `</section>${heading}`),
+    'body outside article': html.replace(body, '').replace('</section>', `</section>${body}`),
+    'article outside root': html.replace('<div id="root">', '<div id="root"></div><div>'),
+    'duplicate app roots': html.replace('<div id="root">', '<div id="root"></div><div id="root">'),
+    'duplicate article markers': html.replace('</section>', '</section><section data-article="page"></section>'),
+    'heading nested in prose': html.replace(heading, '').replace(expectedArticleBody(post.body), `${heading}${expectedArticleBody(post.body)}`),
+  };
+
+  for (const [name, changed] of Object.entries(cases)) {
+    assert.notDeepEqual(verifyArticleHtml(changed, post), [], name);
+  }
 });
 
 test('a wrong visible heading is rejected even when metadata matches', () => {
