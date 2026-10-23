@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { importEbayItems, TOKEN_URL } = require('../shared/ebay-import.cjs');
+const { validateVaultData } = require('../shared/content.cjs');
 
 const silentLogger = { log() {}, error() {} };
 
@@ -175,6 +176,70 @@ test('a concurrent edit aborts the write instead of overwriting it', async (t) =
   assert.deepEqual(result.added, []);
   assert.deepEqual(result.failed, [{ id: '111111111', reason: 'stale-content' }]);
   assert.deepEqual(stored.vault, []);
+  assert.equal(validateVaultData(stored), null);
+});
+
+test('wrong field types fail without touching data.json', async (t) => {
+  const responses = [
+    { title: { unexpected: 'object' } },
+    { price: { value: { unexpected: 'object' } } },
+    { image: { imageUrl: 123 } },
+    { itemWebUrl: ['unexpected'] },
+  ];
+
+  for (const response of responses) {
+    const dataPath = tempDataFile(t);
+    const before = fs.readFileSync(dataPath, 'utf8');
+    const http = async ({ url }) => {
+      if (url === TOKEN_URL) return tokenResponse();
+      return { ok: true, status: 200, text: JSON.stringify(response) };
+    };
+
+    const result = await importEbayItems(baseOptions(dataPath, { http, itemIds: ['111111111'] }));
+
+    assert.deepEqual(result.added, []);
+    assert.deepEqual(result.failed, [{ id: '111111111', reason: 'invalid-response' }]);
+    assert.equal(fs.readFileSync(dataPath, 'utf8'), before);
+  }
+});
+
+test('a malformed item does not block a valid item in the same batch', async (t) => {
+  const dataPath = tempDataFile(t);
+  const http = async ({ url }) => {
+    if (url === TOKEN_URL) return tokenResponse();
+    const id = itemIdFromUrl(url);
+    if (id === '111111111') return { ok: true, status: 200, text: JSON.stringify({ title: 42 }) };
+    return itemResponse(id);
+  };
+
+  const result = await importEbayItems(baseOptions(dataPath, { http }));
+  const stored = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+
+  assert.deepEqual(result.added, ['222222222']);
+  assert.deepEqual(result.failed, [{ id: '111111111', reason: 'invalid-response' }]);
+  assert.deepEqual(stored.vault.map((item) => item.id), ['222222222']);
+  assert.equal(validateVaultData(stored), null);
+});
+
+test('missing optional fields keep their documented fallbacks', async (t) => {
+  const dataPath = tempDataFile(t);
+  const http = async ({ url }) => {
+    if (url === TOKEN_URL) return tokenResponse();
+    return { ok: true, status: 200, text: JSON.stringify({}) };
+  };
+
+  const result = await importEbayItems(baseOptions(dataPath, { http, itemIds: ['111111111'] }));
+  const stored = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+
+  assert.deepEqual(result.added, ['111111111']);
+  assert.deepEqual(stored.vault[0], {
+    id: '111111111',
+    title: 'Unknown Item',
+    price: 'Check Listing',
+    image: '',
+    url: 'https://www.ebay.com/itm/111111111',
+  });
+  assert.equal(validateVaultData(stored), null);
 });
 
 test('re-importing an existing item updates it in place', async (t) => {

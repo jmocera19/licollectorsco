@@ -31,6 +31,7 @@ const normalizeFailureReason = (error) => {
   if (/status 404|item not found|not found/i.test(message)) return 'item-not-found';
   if (/ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|fetch failed|getaddrinfo|network/i.test(message)) return 'network-failed';
   if (/invalid token response|missing access_token/i.test(message)) return 'invalid-response';
+  if (/invalid import response|invalid import data/i.test(message)) return 'invalid-response';
   if (/invalid json|unexpected token|json/i.test(message)) return 'invalid-response';
   return 'unknown';
 };
@@ -69,13 +70,47 @@ const requestAccessToken = async ({ http, clientId, clientSecret }) => {
   return data.access_token;
 };
 
-const extractVaultItem = (itemId, itemData) => ({
-  id: itemId,
-  title: itemData.title || 'Unknown Item',
-  price: itemData.price && itemData.price.value ? `$${itemData.price.value}` : 'Check Listing',
-  image: itemData.image && itemData.image.imageUrl ? itemData.image.imageUrl : '',
-  url: itemData.itemWebUrl || `https://www.ebay.com/itm/${itemId}`,
-});
+const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const invalidResponse = (field) => {
+  throw new Error(`Invalid import response: ${field} has an unexpected type.`);
+};
+
+const extractVaultItem = (itemId, itemData) => {
+  if (!isPlainObject(itemData)) invalidResponse('item');
+
+  const { title, price, image, itemWebUrl } = itemData;
+
+  if (title !== undefined && title !== null && typeof title !== 'string') invalidResponse('title');
+
+  if (price !== undefined && price !== null) {
+    if (!isPlainObject(price)) invalidResponse('price');
+    if (price.value !== undefined && price.value !== null
+      && typeof price.value !== 'string'
+      && !(typeof price.value === 'number' && Number.isFinite(price.value))) {
+      invalidResponse('price.value');
+    }
+  }
+
+  if (image !== undefined && image !== null) {
+    if (!isPlainObject(image)) invalidResponse('image');
+    if (image.imageUrl !== undefined && image.imageUrl !== null && typeof image.imageUrl !== 'string') {
+      invalidResponse('image.imageUrl');
+    }
+  }
+
+  if (itemWebUrl !== undefined && itemWebUrl !== null && typeof itemWebUrl !== 'string') {
+    invalidResponse('itemWebUrl');
+  }
+
+  return {
+    id: itemId,
+    title: title || 'Unknown Item',
+    price: price && price.value ? `$${price.value}` : 'Check Listing',
+    image: image && image.imageUrl ? image.imageUrl : '',
+    url: itemWebUrl || `https://www.ebay.com/itm/${itemId}`,
+  };
+};
 
 /**
  * @param {object} options
@@ -154,9 +189,14 @@ const importEbayItems = async ({
       }
 
       const newItem = extractVaultItem(itemId, parseJson(response.text));
+      const candidate = upsertVaultItem(dataContent, newItem).data;
+      const candidateProblem = validateVaultData(candidate);
+      if (candidateProblem) {
+        throw new Error(`Invalid import data: ${candidateProblem}`);
+      }
+      dataContent = candidate;
       logger.log('Extracted:', JSON.stringify(newItem, null, 2));
 
-      dataContent = upsertVaultItem(dataContent, newItem).data;
       fetchedIds.push(itemId);
 
       if (delayMs > 0) await sleep(delayMs);
@@ -170,6 +210,13 @@ const importEbayItems = async ({
   // atomically even when other IDs failed. A concurrent edit aborts the write
   // instead of overwriting it.
   if (fetchedIds.length > 0) {
+    const writeProblem = validateVaultData(dataContent);
+    if (writeProblem) {
+      logger.error(`❌ Refusing to save invalid data.json: ${writeProblem}`);
+      fetchedIds.forEach((itemId) => failed.push({ id: itemId, reason: 'invalid-response' }));
+      return { added, failed };
+    }
+
     const writeResult = writeJsonAtomic(dataPath, dataContent, {
       expectedFingerprint: readResult.fingerprint,
     });
