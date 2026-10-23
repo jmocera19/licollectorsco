@@ -55,7 +55,10 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
   displays the complete managed diff, confirms before staging/committing/pushing,
   stages only approved paths, commits `Content update: YYYY-MM-DD`, and uses plain
   `git push origin main` without force options. Cancellation or blocking may leave
-  `public/sitemap.xml` regenerated on disk but never commits or pushes.
+  `public/sitemap.xml` regenerated on disk but never commits or pushes. The workflow
+  lives in `manager/sync.js` with injected Git/Node/confirmation adapters; tests run
+  it against temporary repositories. `manager/mutation-lock.js` serializes sync,
+  import, publish, delete, and removal in the main process.
 - Manager styling is generated, not remote: CSS sources are `manager/index.html`,
   `manager/renderer.js`, `manager/tailwind.config.cjs`, and `manager/input.css`;
   regenerate with `npm run generate:manager-css` (root, local Tailwind binary) whenever
