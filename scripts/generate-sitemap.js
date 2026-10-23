@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { SITE_URL as domain } from '../shared/seo.js';
+import { readPostsFile } from '../shared/content.cjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,9 +12,7 @@ const sitemapPath = path.resolve(__dirname, '../public/sitemap.xml');
 
 try {
   // 1. Read blog posts. Only canonical, independently indexable pages belong in a sitemap.
-  const rawPosts = fs.readFileSync(postsPath, 'utf8');
-  const postsData = JSON.parse(rawPosts);
-  const posts = postsData.posts || [];
+  const posts = readPostsFile(postsPath);
 
   const latestPostDate = posts.reduce(
     (latest, post) => post.date > latest ? post.date : latest,

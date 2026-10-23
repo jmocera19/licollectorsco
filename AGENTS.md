@@ -24,6 +24,11 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
   The browser (`src/components/Seo.tsx`) and build scripts (`scripts/prerender-pages.js`,
   `scripts/generate-sitemap.js`) both import it. Change metadata there, not in page
   components or `index.html`; `tests/seo.test.js` checks the static home block against it.
+- `shared/content.cjs` is the shared content contract: post/vault validation, atomic JSON
+  writes, stale-write detection, and pure publish/delete/vault mutations. The Manager
+  (`manager/main.js`) and scripts (`scripts/add-to-vault.js`, `scripts/prerender-pages.js`,
+  `scripts/generate-sitemap.js`) all use it. Builds fail on invalid `src/posts.json`, and
+  Manager saves reject a file that changed after it was read instead of overwriting it.
 - `src/data.json` holds site content:
   - `vault` — eBay "vault" items (rendered by `src/components/Vault.tsx`)
   - `livestream` — the `isLive` flag, platform, and stream URL (used by

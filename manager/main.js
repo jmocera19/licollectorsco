@@ -1,8 +1,21 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+
+const {
+  isValidItemId,
+  isValidSlug,
+  isPlainObject,
+  validatePostPayload,
+  validatePostsData,
+  validateVaultData,
+  readJsonFile,
+  applyPostPublish,
+  applyPostDelete,
+  removeVaultItem,
+  writeJsonAtomic,
+} = require('../shared/content.cjs');
 
 const dataPath = path.join(__dirname, '../src/data.json');
 const postsPath = path.join(__dirname, '../src/posts.json');
@@ -12,14 +25,6 @@ const COMMAND_MAX_BUFFER = 10 * 1024 * 1024;
 const MAX_DIFF_PREVIEW_LENGTH = 4 * 1024;
 const MANAGED_FILES = ['src/data.json', 'src/posts.json', 'public/sitemap.xml'];
 const MANAGED_FILE_SET = new Set(MANAGED_FILES);
-const ITEM_ID_RE = /^\d{9,15}$/;
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MAX_SLUG_LENGTH = 80;
-const MAX_TITLE_LENGTH = 200;
-const MAX_EXCERPT_LENGTH = 300;
-const MAX_BODY_LENGTH = 200_000;
-const MAX_TAGS = 10;
-const MAX_TAG_LENGTH = 40;
 const OUTPUT_TAIL_LENGTH = 2000;
 const VAULT_RESULT_PREFIX = '__VAULT_RESULT__ ';
 
@@ -106,66 +111,6 @@ const newYorkDate = () => {
   return `${get('year')}-${get('month')}-${get('day')}`;
 };
 
-const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isValidItemId = (value) => typeof value === 'string' && ITEM_ID_RE.test(value);
-
-const isValidSlug = (value) => typeof value === 'string'
-  && value.length >= 1
-  && value.length <= MAX_SLUG_LENGTH
-  && SLUG_RE.test(value);
-
-const normalizeTags = (value) => {
-  if (!Array.isArray(value)) return { error: 'Tags must be a list of short text labels.' };
-  const tags = [];
-  for (const tag of value) {
-    if (typeof tag !== 'string') return { error: 'Tags must be a list of short text labels.' };
-    const trimmed = tag.trim();
-    if (!trimmed) continue;
-    if (trimmed.length > MAX_TAG_LENGTH) {
-      return { error: `Each tag must be at most ${MAX_TAG_LENGTH} characters.` };
-    }
-    if (!tags.includes(trimmed)) tags.push(trimmed);
-  }
-  if (tags.length > MAX_TAGS) return { error: `Use at most ${MAX_TAGS} tags.` };
-  return { tags };
-};
-
-const validatePostPayload = (post) => {
-  if (!isPlainObject(post)) {
-    return { ok: false, errors: ['The post payload must be an object.'] };
-  }
-
-  const errors = [];
-  const slug = typeof post.slug === 'string' ? post.slug.trim() : '';
-  const title = typeof post.title === 'string' ? post.title.trim() : '';
-  const excerpt = typeof post.excerpt === 'string' ? post.excerpt.trim() : '';
-  const body = typeof post.body === 'string' ? post.body.trim() : '';
-
-  if (!isValidSlug(slug)) {
-    errors.push('Slug must be 1-80 lowercase letters, numbers, or single hyphens, and may not start or end with a hyphen.');
-  }
-  if (title.length < 1 || title.length > MAX_TITLE_LENGTH) {
-    errors.push(`Title must be 1-${MAX_TITLE_LENGTH} characters.`);
-  }
-  if (excerpt.length < 1 || excerpt.length > MAX_EXCERPT_LENGTH) {
-    errors.push(`Excerpt must be 1-${MAX_EXCERPT_LENGTH} characters.`);
-  }
-  if (body.length < 1 || body.length > MAX_BODY_LENGTH) {
-    errors.push(`Body must be 1-${MAX_BODY_LENGTH} characters.`);
-  }
-
-  const tagsResult = normalizeTags(post.tags);
-  if (tagsResult.error) errors.push(tagsResult.error);
-
-  if (errors.length > 0) return { ok: false, errors };
-
-  return {
-    ok: true,
-    post: { slug, title, excerpt, body, tags: tagsResult.tags },
-  };
-};
-
 const validateOverwriteOptions = (options) => {
   if (options === undefined || options === null) return { ok: true, overwrite: false };
   if (!isPlainObject(options)) return { ok: false, message: 'Publish options must be an object.' };
@@ -173,78 +118,6 @@ const validateOverwriteOptions = (options) => {
   if (overwrite === undefined) return { ok: true, overwrite: false };
   if (typeof overwrite !== 'boolean') return { ok: false, message: 'The overwrite option must be true or false.' };
   return { ok: true, overwrite };
-};
-
-const validateVaultData = (data) => {
-  if (!isPlainObject(data)) return 'data.json does not contain a JSON object.';
-  if (!Array.isArray(data.vault)) return 'data.json does not contain a vault array.';
-  for (const item of data.vault) {
-    if (!isPlainObject(item)) return 'data.json contains a vault entry that is not an object.';
-    if (typeof item.id !== 'string' || typeof item.title !== 'string'
-      || typeof item.price !== 'string' || typeof item.image !== 'string'
-      || typeof item.url !== 'string') {
-      return 'data.json contains a vault entry missing a string id, title, price, image, or url.';
-    }
-  }
-  return null;
-};
-
-const validatePostsData = (data) => {
-  if (!isPlainObject(data)) return 'posts.json does not contain a JSON object.';
-  if (!Array.isArray(data.posts)) return 'posts.json does not contain a posts array.';
-  for (const post of data.posts) {
-    if (!isPlainObject(post)) return 'posts.json contains a post entry that is not an object.';
-    if (typeof post.slug !== 'string' || typeof post.title !== 'string' || typeof post.date !== 'string') {
-      return 'posts.json contains a post entry missing a string slug, title, or date.';
-    }
-  }
-  return null;
-};
-
-const readJsonFile = (filePath, validateShape) => {
-  let raw;
-  try {
-    raw = fs.readFileSync(filePath, 'utf8');
-  } catch (error) {
-    return { status: 'error', step: 'read', message: error.message };
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    return { status: 'error', step: 'parse', message: error.message };
-  }
-
-  const shapeProblem = validateShape(parsed);
-  if (shapeProblem) {
-    return { status: 'error', step: 'shape', message: shapeProblem };
-  }
-
-  return { status: 'ok', data: parsed };
-};
-
-// Atomic JSON write: unique temp file in the destination directory, then a
-// same-volume rename (Windows: MoveFileEx REPLACE_EXISTING). On failure only
-// this operation's own temp file is removed and the destination is untouched.
-// Pairs with the duplicated ESM helper in scripts/add-to-vault.js.
-const writeJsonAtomic = (filePath, value) => {
-  const temporaryPath = path.join(
-    path.dirname(filePath),
-    `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
-  );
-  try {
-    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
-    fs.renameSync(temporaryPath, filePath);
-    return { ok: true };
-  } catch (error) {
-    try {
-      fs.unlinkSync(temporaryPath);
-    } catch (cleanupError) {
-      /* only the operation's own temp file is targeted */
-    }
-    return { ok: false, message: error.message, code: error.code };
-  }
 };
 
 const tailOutput = (value) => {
@@ -284,6 +157,8 @@ const normalizedImportMessage = (reason) => {
       return 'Could not reach eBay. Check the network connection and try again.';
     case 'timeout':
       return 'The eBay import timed out. Try again.';
+    case 'stale-content':
+      return 'data.json changed while the import was running. Reload the vault and try again.';
     case 'invalid-response':
       return 'eBay returned an unexpected response. Try again.';
     default:
@@ -750,9 +625,8 @@ ipcMain.handle('remove-vault-item', async (event, targetId) => {
     };
   }
 
-  const dataObj = readResult.data;
-  const remaining = dataObj.vault.filter((item) => isPlainObject(item) && item.id !== targetId);
-  if (remaining.length === dataObj.vault.length) {
+  const removal = removeVaultItem(readResult.data, targetId);
+  if (!removal.removed) {
     return {
       success: false,
       error: 'not-found',
@@ -761,17 +635,20 @@ ipcMain.handle('remove-vault-item', async (event, targetId) => {
     };
   }
 
-  dataObj.vault = remaining;
-  const writeResult = writeJsonAtomic(dataPath, dataObj);
+  const writeResult = writeJsonAtomic(dataPath, removal.data, {
+    expectedFingerprint: readResult.fingerprint,
+  });
   if (!writeResult.ok) {
     return {
       success: false,
-      error: 'write-failed',
-      message: `Could not save data.json: ${writeResult.message}`,
+      error: writeResult.code === 'stale' ? 'stale-content' : 'write-failed',
+      message: writeResult.code === 'stale'
+        ? 'data.json changed while the item was being removed. Nothing was removed; reload and retry.'
+        : `Could not save data.json: ${writeResult.message}`,
     };
   }
 
-  return { success: true, removedId: targetId, remainingCount: remaining.length };
+  return { success: true, removedId: targetId, remainingCount: removal.data.vault.length };
 });
 
 // --- IPC: Run add-to-vault Scraper ---
@@ -1077,46 +954,40 @@ ipcMain.handle('publish-post', async (event, post, options) => {
     return { status: 'error', step: readResult.step, message: readResult.message };
   }
 
-  const data = readResult.data;
-  const canonical = postResult.post;
-  const existing = data.posts.find((entry) => isPlainObject(entry) && entry.slug === canonical.slug);
-  const isReplacement = Boolean(existing);
+  const outcome = applyPostPublish(readResult.data, postResult.post, {
+    overwrite: optionsResult.overwrite,
+    date: newYorkDate(),
+  });
 
   // Conflict check happens before any write; nothing is modified here.
-  if (isReplacement && !optionsResult.overwrite) {
+  if (outcome.status === 'conflict') {
     return {
       status: 'conflict',
-      slug: canonical.slug,
-      existing: {
-        title: typeof existing.title === 'string' ? existing.title : canonical.slug,
-        date: typeof existing.date === 'string' ? existing.date : null,
-      },
+      slug: postResult.post.slug,
+      existing: outcome.existing,
       wrote: false,
     };
   }
 
-  // Canonical object: id always mirrors slug; the renderer never supplies the
-  // authoritative date. Replacements preserve the original publication date;
-  // new posts use the current America/New_York calendar date.
-  const publishedPost = {
-    id: canonical.slug,
-    slug: canonical.slug,
-    title: canonical.title,
-    date: isReplacement ? existing.date : newYorkDate(),
-    tags: canonical.tags,
-    excerpt: canonical.excerpt,
-    body: canonical.body,
-  };
-
-  data.posts = data.posts.filter((entry) => !(isPlainObject(entry) && entry.slug === canonical.slug));
-  data.posts.unshift(publishedPost);
-
-  const writeResult = writeJsonAtomic(postsPath, data);
+  const writeResult = writeJsonAtomic(postsPath, outcome.data, {
+    expectedFingerprint: readResult.fingerprint,
+  });
   if (!writeResult.ok) {
-    return { status: 'error', step: 'write', message: `Could not save posts.json: ${writeResult.message}` };
+    return {
+      status: 'error',
+      step: writeResult.code === 'stale' ? 'stale' : 'write',
+      message: writeResult.code === 'stale'
+        ? 'posts.json changed while the post was being saved. Nothing was written; reload and retry.'
+        : `Could not save posts.json: ${writeResult.message}`,
+    };
   }
 
-  return { status: 'published', slug: publishedPost.slug, date: publishedPost.date, created: !isReplacement };
+  return {
+    status: 'published',
+    slug: outcome.post.slug,
+    date: outcome.post.date,
+    created: outcome.created,
+  };
 });
 
 // --- IPC: Delete Blog Post ---
@@ -1131,9 +1002,8 @@ ipcMain.handle('delete-post', async (event, slug) => {
     return { status: 'error', step: readResult.step, message: readResult.message };
   }
 
-  const data = readResult.data;
-  const remaining = data.posts.filter((entry) => !(isPlainObject(entry) && entry.slug === trimmedSlug));
-  if (remaining.length === data.posts.length) {
+  const deletion = applyPostDelete(readResult.data, trimmedSlug);
+  if (!deletion.removed) {
     return {
       status: 'not-found',
       slug: trimmedSlug,
@@ -1141,12 +1011,19 @@ ipcMain.handle('delete-post', async (event, slug) => {
     };
   }
 
-  data.posts = remaining;
-  const writeResult = writeJsonAtomic(postsPath, data);
+  const writeResult = writeJsonAtomic(postsPath, deletion.data, {
+    expectedFingerprint: readResult.fingerprint,
+  });
   if (!writeResult.ok) {
-    return { status: 'error', step: 'write', message: `Could not save posts.json: ${writeResult.message}` };
+    return {
+      status: 'error',
+      step: writeResult.code === 'stale' ? 'stale' : 'write',
+      message: writeResult.code === 'stale'
+        ? 'posts.json changed while the post was being deleted. Nothing was deleted; reload and retry.'
+        : `Could not save posts.json: ${writeResult.message}`,
+    };
   }
 
-  return { status: 'deleted', slug: trimmedSlug, remainingCount: remaining.length };
+  return { status: 'deleted', slug: trimmedSlug, remainingCount: deletion.data.posts.length };
 });
 

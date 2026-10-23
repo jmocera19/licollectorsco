@@ -1,12 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import {
+  isValidItemId,
+  readJsonFile,
+  validateVaultData,
+  upsertVaultItem,
+  writeJsonAtomic,
+} from '../shared/content.cjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const ITEM_ID_PATTERN = /^\d{9,15}$/;
 const VAULT_RESULT_PREFIX = '__VAULT_RESULT__ ';
 
 const added = [];
@@ -27,29 +32,6 @@ function normalizeFailureReason(error) {
   if (/ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|fetch failed|getaddrinfo|network/i.test(message)) return 'network-failed';
   if (/invalid json|unexpected token|json/i.test(message)) return 'invalid-response';
   return 'unknown';
-}
-
-// Atomic JSON write: unique temp file in the destination directory, then a
-// same-volume rename (Windows: MoveFileEx REPLACE_EXISTING). On failure only
-// this operation's own temp file is removed and the destination is untouched.
-// Pairs with the duplicated CJS helper in manager/main.js.
-function writeJsonAtomic(filePath, value) {
-  const temporaryPath = path.join(
-    path.dirname(filePath),
-    `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
-  );
-  try {
-    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
-    fs.renameSync(temporaryPath, filePath);
-    return { ok: true };
-  } catch (error) {
-    try {
-      fs.unlinkSync(temporaryPath);
-    } catch (cleanupError) {
-      /* only the operation's own temp file is targeted */
-    }
-    return { ok: false, message: error.message };
-  }
 }
 
 // Manual environment variables parser to avoid third-party dependencies
@@ -106,7 +88,7 @@ async function run() {
   }
 
   // Validate every supplied ID before loading credentials or contacting eBay.
-  const invalidIds = itemIds.filter((itemId) => !ITEM_ID_PATTERN.test(itemId));
+  const invalidIds = itemIds.filter((itemId) => !isValidItemId(itemId));
   if (invalidIds.length > 0) {
     console.error(`❌ Invalid eBay item ID(s): ${invalidIds.join(', ')}. IDs must be 9-15 digits.`);
     invalidIds.forEach((itemId) => failed.push({ id: itemId, reason: 'invalid-item-id' }));
@@ -125,14 +107,13 @@ async function run() {
   }
 
   const dataPath = path.resolve(__dirname, '../src/data.json');
-  let dataContent;
-  try {
-    dataContent = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-  } catch (err) {
-    console.error(`❌ Failed to read or parse data.json: ${err.message}`);
+  const readResult = readJsonFile(dataPath, validateVaultData);
+  if (readResult.status !== 'ok') {
+    console.error(`❌ Failed to read data.json (${readResult.step}): ${readResult.message}`);
     itemIds.forEach((itemId) => failed.push({ id: itemId, reason: 'unknown' }));
     return 1;
   }
+  let dataContent = readResult.data;
 
   let token;
   try {
@@ -174,12 +155,7 @@ async function run() {
       const newItem = { id: itemId, title, price, image, url: itemUrl };
       console.log("Extracted:", JSON.stringify(newItem, null, 2));
 
-      const existIndex = dataContent.vault.findIndex(v => v.id === itemId);
-      if (existIndex >= 0) {
-        dataContent.vault[existIndex] = newItem;
-      } else {
-        dataContent.vault.push(newItem);
-      }
+      dataContent = upsertVaultItem(dataContent, newItem).data;
 
       fetchedIds.push(itemId);
 
@@ -194,12 +170,15 @@ async function run() {
 
   // Intentional partial-batch behavior: successfully fetched IDs are written
   // atomically even when other IDs failed; the exit code stays nonzero when
-  // any ID failed.
+  // any ID failed. A concurrent edit aborts the write instead of overwriting it.
   if (fetchedIds.length > 0) {
-    const writeResult = writeJsonAtomic(dataPath, dataContent);
+    const writeResult = writeJsonAtomic(dataPath, dataContent, {
+      expectedFingerprint: readResult.fingerprint,
+    });
     if (!writeResult.ok) {
+      const reason = writeResult.code === 'stale' ? 'stale-content' : 'unknown';
       console.error(`\n❌ Failed to save data.json: ${writeResult.message}`);
-      fetchedIds.forEach((itemId) => failed.push({ id: itemId, reason: 'unknown' }));
+      fetchedIds.forEach((itemId) => failed.push({ id: itemId, reason }));
       return 1;
     }
     // Report an ID as added only after its data was committed to data.json.

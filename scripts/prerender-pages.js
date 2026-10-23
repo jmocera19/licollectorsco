@@ -8,6 +8,7 @@ import {
   blogSeo,
   articleSeo,
 } from '../shared/seo.js';
+import { readPostsFile } from '../shared/content.cjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,7 +18,7 @@ const templatePath = path.join(distPath, 'index.html');
 const postsPath = path.join(projectRoot, 'src', 'posts.json');
 
 const template = fs.readFileSync(templatePath, 'utf8');
-const posts = JSON.parse(fs.readFileSync(postsPath, 'utf8')).posts || [];
+const posts = readPostsFile(postsPath);
 
 if (!SEO_BLOCK_PATTERN.test(template)) {
   throw new Error('Could not find the SEO block in dist/index.html.');
