@@ -90,12 +90,22 @@ test('static rendering escapes markup and only adds publication date for article
   assert.doesNotMatch(homeBlock, /article:published_time/);
 });
 
-test('missing-post metadata is noindex and does not emit canonical or JSON-LD', () => {
+test('missing-post metadata is noindex and emits no absent-value placeholders', () => {
   const seo = notFoundSeo('gone');
+  const block = renderSeoBlock(seo);
 
   assert.equal(seo.noIndex, true);
   assert.equal(seo.canonicalUrl, undefined);
   assert.equal(seo.structuredData, undefined);
-  assert.match(renderSeoBlock(seo), /content="noindex, follow"/);
-  assert.doesNotMatch(renderSeoBlock(seo), /rel="canonical"/);
+  assert.match(block, /content="noindex, follow"/);
+  assert.doesNotMatch(block, /rel="canonical"/);
+  assert.doesNotMatch(block, /og:url/);
+  assert.doesNotMatch(block, /application\/ld\+json/);
+  assert.doesNotMatch(block, /undefined/);
+});
+
+test('home JSON-LD keeps literal dollar signs', () => {
+  const block = renderSeoBlock(homeSeo());
+
+  assert.match(block, /"priceRange":"\$\$"/);
 });

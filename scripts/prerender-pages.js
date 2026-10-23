@@ -29,7 +29,7 @@ if (!SEO_BLOCK_PATTERN.test(template)) {
 const EMPTY_ROOT = '<div id="root"></div>';
 
 const writeRoute = (routePath, seo, { url } = {}) => {
-  let html = template.replace(SEO_BLOCK_PATTERN, renderSeoBlock(seo));
+  let html = template.replace(SEO_BLOCK_PATTERN, () => renderSeoBlock(seo));
 
   if (url) {
     if (!html.includes(EMPTY_ROOT)) {
@@ -40,7 +40,7 @@ const writeRoute = (routePath, seo, { url } = {}) => {
     if (markup.length < 1000 || !markup.includes('prose')) {
       throw new Error(`Server rendering produced no article content for ${url}.`);
     }
-    html = html.replace(EMPTY_ROOT, `<div id="root">${markup}</div>`);
+    html = html.replace(EMPTY_ROOT, () => `<div id="root">${markup}</div>`);
   }
 
   const targetDirectory = path.join(distPath, routePath);
@@ -65,14 +65,14 @@ for (const post of posts) {
 // Keep the root document on the same shared metadata as the client bundle.
 fs.writeFileSync(
   templatePath,
-  template.replace(SEO_BLOCK_PATTERN, renderSeoBlock(homeSeo())),
+  template.replace(SEO_BLOCK_PATTERN, () => renderSeoBlock(homeSeo())),
   'utf8',
 );
 
 // Cloudflare Pages serves this document for unmatched routes.
 fs.writeFileSync(
   path.join(distPath, '404.html'),
-  template.replace(SEO_BLOCK_PATTERN, renderSeoBlock(notFoundSeo())),
+  template.replace(SEO_BLOCK_PATTERN, () => renderSeoBlock(notFoundSeo())),
   'utf8',
 );
 

@@ -36,3 +36,21 @@ test('prerendered articles keep route-specific SEO tags', () => {
     assert.match(html, /<meta data-seo="robots" name="robots" content="index, follow"/);
   }
 });
+
+test('template replacements preserve literal generated text', () => {
+  const home = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+  const jsonLd = home.match(/<script data-seo="structured-data"[^>]*>([\s\S]*?)<\/script>/);
+
+  assert.ok(jsonLd, 'home page must contain JSON-LD');
+  assert.equal(JSON.parse(jsonLd[1]).priceRange, '$$');
+});
+
+test('the 404 document omits absent metadata instead of writing placeholders', () => {
+  const html = fs.readFileSync(path.join(distPath, '404.html'), 'utf8');
+
+  assert.match(html, /content="noindex, follow"/);
+  assert.doesNotMatch(html, /content="undefined"/);
+  assert.doesNotMatch(html, /application\/ld\+json/);
+  assert.doesNotMatch(html, /rel="canonical"/);
+  assert.doesNotMatch(html, /og:url/);
+});

@@ -21,6 +21,9 @@ export interface SeoPost {
 export const SITE_URL: string;
 export const SITE_NAME: string;
 export const DEFAULT_IMAGE: string;
+export const DEFAULT_IMAGE_TYPE: string;
+export const DEFAULT_IMAGE_WIDTH: string;
+export const DEFAULT_IMAGE_HEIGHT: string;
 export const BLOG_TITLE: string;
 export const BLOG_DESCRIPTION: string;
 export const HOME_TITLE: string;

@@ -1,5 +1,12 @@
 import { useEffect, useLayoutEffect } from 'react';
-import { DEFAULT_IMAGE, type SeoData } from '../../shared/seo.js';
+import {
+  DEFAULT_IMAGE,
+  DEFAULT_IMAGE_HEIGHT,
+  DEFAULT_IMAGE_TYPE,
+  DEFAULT_IMAGE_WIDTH,
+  SITE_NAME,
+  type SeoData,
+} from '../../shared/seo.js';
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
@@ -54,10 +61,10 @@ const Seo = ({ seo }: { seo: SeoData }) => {
     setMeta('og-title', 'property', 'og:title', title);
     setMeta('og-description', 'property', 'og:description', description);
     setMeta('og-image', 'property', 'og:image', DEFAULT_IMAGE);
-    setMeta('og-image-type', 'property', 'og:image:type', 'image/jpeg');
-    setMeta('og-image-width', 'property', 'og:image:width', '1024');
-    setMeta('og-image-height', 'property', 'og:image:height', '541');
-    setMeta('og-site-name', 'property', 'og:site_name', 'Long Island Collectors Co.');
+    setMeta('og-image-type', 'property', 'og:image:type', DEFAULT_IMAGE_TYPE);
+    setMeta('og-image-width', 'property', 'og:image:width', DEFAULT_IMAGE_WIDTH);
+    setMeta('og-image-height', 'property', 'og:image:height', DEFAULT_IMAGE_HEIGHT);
+    setMeta('og-site-name', 'property', 'og:site_name', SITE_NAME);
     setMeta('twitter-card', 'name', 'twitter:card', 'summary_large_image');
     setMeta('twitter-title', 'name', 'twitter:title', title);
     setMeta('twitter-description', 'name', 'twitter:description', description);

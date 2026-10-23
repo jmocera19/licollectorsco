@@ -6,9 +6,9 @@ export const SITE_URL = 'https://licollectorsco.com';
 export const SITE_NAME = 'Long Island Collectors Co.';
 const CONTACT_EMAIL = 'info@licollectorsco.com';
 export const DEFAULT_IMAGE = `${SITE_URL}/og_preview.jpg`;
-const DEFAULT_IMAGE_TYPE = 'image/jpeg';
-const DEFAULT_IMAGE_WIDTH = '1024';
-const DEFAULT_IMAGE_HEIGHT = '541';
+export const DEFAULT_IMAGE_TYPE = 'image/jpeg';
+export const DEFAULT_IMAGE_WIDTH = '1024';
+export const DEFAULT_IMAGE_HEIGHT = '541';
 
 export const BLOG_TITLE = 'Pokémon Card Grading & Market Guides | Long Island Collectors Co.';
 export const BLOG_DESCRIPTION = 'Read Pokémon card grading guides, collector strategies, market analysis, and hobby news from Long Island Collectors Co.';
@@ -24,11 +24,11 @@ const HOME_STRUCTURED_DESCRIPTION = 'Buy and sell graded Pokémon cards, Funko P
  * @property {string} title
  * @property {string} description
  * @property {string} path
- * @property {string} canonicalUrl
+ * @property {string} [canonicalUrl]
  * @property {SeoType} type
  * @property {string} [publishedTime]
  * @property {boolean} [noIndex]
- * @property {Record<string, unknown>} structuredData
+ * @property {Record<string, unknown>} [structuredData]
  */
 
 const organizationRef = () => ({
@@ -159,8 +159,8 @@ export const renderSeoBlock = (seo) => `<!-- SEO:START -->
     <meta data-seo="description" name="description" content="${escapeHtml(seo.description)}" />
     <meta data-seo="robots" name="robots" content="${seo.noIndex ? 'noindex, follow' : 'index, follow'}" />${seo.canonicalUrl ? `
     <link data-seo="canonical" rel="canonical" href="${escapeHtml(seo.canonicalUrl)}" />` : ''}
-    <meta data-seo="og-type" property="og:type" content="${seo.type}" />
-    <meta data-seo="og-url" property="og:url" content="${escapeHtml(seo.canonicalUrl)}" />
+    <meta data-seo="og-type" property="og:type" content="${seo.type}" />${seo.canonicalUrl ? `
+    <meta data-seo="og-url" property="og:url" content="${escapeHtml(seo.canonicalUrl)}" />` : ''}
     <meta data-seo="og-title" property="og:title" content="${escapeHtml(seo.title)}" />
     <meta data-seo="og-description" property="og:description" content="${escapeHtml(seo.description)}" />
     <meta data-seo="og-image" property="og:image" content="${DEFAULT_IMAGE}" />
@@ -172,6 +172,6 @@ export const renderSeoBlock = (seo) => `<!-- SEO:START -->
     <meta data-seo="twitter-title" name="twitter:title" content="${escapeHtml(seo.title)}" />
     <meta data-seo="twitter-description" name="twitter:description" content="${escapeHtml(seo.description)}" />
     <meta data-seo="twitter-image" name="twitter:image" content="${DEFAULT_IMAGE}" />${seo.publishedTime ? `
-    <meta data-seo="article-published-time" property="article:published_time" content="${escapeHtml(seo.publishedTime)}" />` : ''}
-    <script data-seo="structured-data" type="application/ld+json">${serializeJsonLd(seo.structuredData ?? {})}</script>
+    <meta data-seo="article-published-time" property="article:published_time" content="${escapeHtml(seo.publishedTime)}" />` : ''}${seo.structuredData ? `
+    <script data-seo="structured-data" type="application/ld+json">${serializeJsonLd(seo.structuredData)}</script>` : ''}
     <!-- SEO:END -->`;
