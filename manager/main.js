@@ -123,6 +123,18 @@ const tailOutput = (value) => {
   return text.length > OUTPUT_TAIL_LENGTH ? text.slice(-OUTPUT_TAIL_LENGTH) : text;
 };
 
+const cleanupWarning = (result, saved) => {
+  const prefix = saved ? 'Content was saved' : 'Content was not saved';
+  const messages = [];
+  if (result.cleanup) {
+    messages.push(`${prefix}, but lock cleanup is required: ${result.cleanup.message} Remove ${result.cleanup.path} after confirming no writer is active.`);
+  }
+  if (result.tempCleanup) {
+    messages.push(`${prefix}, but temporary-file cleanup is required: remove ${result.tempCleanup.path} after confirming no writer is active.`);
+  }
+  return messages.join(' ');
+};
+
 const parseVaultResultLine = (stdout) => {
   if (typeof stdout !== 'string') return null;
   const lines = stdout.split(/\r?\n/);
@@ -260,16 +272,24 @@ ipcMain.handle('remove-vault-item', async (event, targetId) => runMutation(
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
+      const warning = cleanupWarning(writeResult, false);
       return {
         success: false,
         error: writeResult.code === 'stale' ? 'stale-content' : 'write-failed',
         message: writeResult.code === 'stale'
-          ? 'data.json changed while the item was being removed. Nothing was removed; reload and retry.'
-          : `Could not save data.json: ${writeResult.message}`,
+          ? `data.json changed while the item was being removed. Nothing was removed; reload and retry.${warning ? ` ${warning}` : ''}`
+          : `Could not save data.json: ${writeResult.message}${warning ? ` ${warning}` : ''}`,
+        ...(warning ? { warnings: [warning] } : {}),
       };
     }
 
-    return { success: true, removedId: targetId, remainingCount: removal.data.vault.length };
+    const warning = cleanupWarning(writeResult, true);
+    return {
+      success: true,
+      removedId: targetId,
+      remainingCount: removal.data.vault.length,
+      ...(warning ? { warning } : {}),
+    };
   },
 ));
 
@@ -292,6 +312,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
 
     const result = await runNode(['scripts/add-to-vault.js', itemId]);
     const resultLine = parseVaultResultLine(result.stdout);
+    const warnings = resultLine && Array.isArray(resultLine.warnings) ? resultLine.warnings : [];
 
     if (result.ok) {
       const failedEntry = resultLine
@@ -309,6 +330,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
             code: result.code,
             timedOut: result.timedOut,
           },
+          ...(warnings.length ? { warnings } : {}),
         };
       }
 
@@ -319,6 +341,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
           success: false,
           error: 'verify-failed',
           message: `The import script finished, but data.json could not be read: ${readResult.message}`,
+          ...(warnings.length ? { warnings } : {}),
         };
       }
 
@@ -335,12 +358,14 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
             code: result.code,
             timedOut: result.timedOut,
           },
+          ...(warnings.length ? { warnings } : {}),
         };
       }
 
       return {
         success: true,
         item: { id: imported.id, title: imported.title, price: imported.price },
+        ...(warnings.length ? { warnings } : {}),
       };
     }
 
@@ -356,6 +381,7 @@ ipcMain.handle('add-vault-item', async (event, itemId) => runMutation(
         code: result.code,
         timedOut: result.timedOut,
       },
+      ...(warnings.length ? { warnings } : {}),
     };
   },
 ));
@@ -423,20 +449,24 @@ ipcMain.handle('publish-post', async (event, post, options) => runMutation(
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
+      const warning = cleanupWarning(writeResult, false);
       return {
         status: 'error',
         step: writeResult.code === 'stale' ? 'stale' : 'write',
-        message: writeResult.code === 'stale'
+        message: `${writeResult.code === 'stale'
           ? 'posts.json changed while the post was being saved. Nothing was written; reload and retry.'
-          : `Could not save posts.json: ${writeResult.message}`,
+          : `Could not save posts.json: ${writeResult.message}`}${warning ? ` ${warning}` : ''}`,
+        ...(warning ? { warnings: [warning] } : {}),
       };
     }
 
+    const warning = cleanupWarning(writeResult, true);
     return {
       status: 'published',
       slug: outcome.post.slug,
       date: outcome.post.date,
       created: outcome.created,
+      ...(warning ? { warning } : {}),
     };
   },
 ));
@@ -473,16 +503,24 @@ ipcMain.handle('delete-post', async (event, slug) => runMutation(
       expectedFingerprint: readResult.fingerprint,
     });
     if (!writeResult.ok) {
+      const warning = cleanupWarning(writeResult, false);
       return {
         status: 'error',
         step: writeResult.code === 'stale' ? 'stale' : 'write',
-        message: writeResult.code === 'stale'
+        message: `${writeResult.code === 'stale'
           ? 'posts.json changed while the post was being deleted. Nothing was deleted; reload and retry.'
-          : `Could not save posts.json: ${writeResult.message}`,
+          : `Could not save posts.json: ${writeResult.message}`}${warning ? ` ${warning}` : ''}`,
+        ...(warning ? { warnings: [warning] } : {}),
       };
     }
 
-    return { status: 'deleted', slug: trimmedSlug, remainingCount: deletion.data.posts.length };
+    const warning = cleanupWarning(writeResult, true);
+    return {
+      status: 'deleted',
+      slug: trimmedSlug,
+      remainingCount: deletion.data.posts.length,
+      ...(warning ? { warning } : {}),
+    };
   },
 ));
 

@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { importEbayItems, TOKEN_URL } = require('../shared/ebay-import.cjs');
 const { validateVaultData } = require('../shared/content.cjs');
+const { lockPathFor } = require('../shared/content.cjs');
 
 const silentLogger = { log() {}, error() {} };
 
@@ -268,4 +269,44 @@ test('a token response without access_token is an invalid response', async (t) =
   }));
 
   assert.deepEqual(result.failed, [{ id: '111111111', reason: 'invalid-response' }]);
+});
+
+test('a saved import surfaces lock cleanup warnings without failing the item', async (t) => {
+  const dataPath = tempDataFile(t);
+  const original = fs.rmSync;
+
+  fs.rmSync = function (target, options) {
+    if (target === lockPathFor(dataPath)) {
+      const error = new Error('Injected busy lock');
+      error.code = 'EBUSY';
+      throw error;
+    }
+    return original.call(fs, target, options);
+  };
+
+  const http = async ({ url }) => {
+    if (url === TOKEN_URL) return tokenResponse();
+    return itemResponse(itemIdFromUrl(url));
+  };
+
+  try {
+    const result = await importEbayItems(baseOptions(dataPath, {
+      http,
+      itemIds: ['111111111'],
+    }));
+
+    assert.deepEqual(result.added, ['111111111']);
+    assert.deepEqual(result.failed, []);
+    assert.equal(result.warnings.length, 1);
+    assert.match(result.warnings[0], /lock cleanup is required/);
+  } finally {
+    fs.rmSync = original;
+  }
+
+  const stored = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+  assert.deepEqual(stored.vault.map((item) => item.id), ['111111111']);
+  assert.equal(validateVaultData(stored), null);
+  assert.equal(fs.existsSync(lockPathFor(dataPath)), true);
+
+  fs.rmSync(lockPathFor(dataPath), { recursive: true, force: true });
 });

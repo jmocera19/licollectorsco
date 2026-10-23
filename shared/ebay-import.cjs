@@ -136,25 +136,36 @@ const importEbayItems = async ({
 }) => {
   const added = [];
   const failed = [];
+  const warnings = [];
+
+  const cleanupWarnings = (result, saved) => {
+    const prefix = saved ? 'Content was saved' : 'Content was not saved';
+    if (result.cleanup) {
+      warnings.push(`${prefix}, but lock cleanup is required: ${result.cleanup.message} Remove ${result.cleanup.path} after confirming no writer is active.`);
+    }
+    if (result.tempCleanup) {
+      warnings.push(`${prefix}, but temporary-file cleanup is required: remove ${result.tempCleanup.path} after confirming no writer is active.`);
+    }
+  };
 
   const invalidIds = itemIds.filter((itemId) => !isValidItemId(itemId));
   if (invalidIds.length > 0) {
     logger.error(`❌ Invalid eBay item ID(s): ${invalidIds.join(', ')}. IDs must be 9-15 digits.`);
     invalidIds.forEach((itemId) => failed.push({ id: itemId, reason: 'invalid-item-id' }));
-    return { added, failed };
+    return { added, failed, warnings };
   }
 
   if (!clientId || !clientSecret) {
     logger.error('❌ Missing EBAY_CLIENT_ID or EBAY_CLIENT_SECRET in .env file.');
     itemIds.forEach((itemId) => failed.push({ id: itemId, reason: 'missing-credentials' }));
-    return { added, failed };
+    return { added, failed, warnings };
   }
 
   const readResult = readJsonFile(dataPath, validateVaultData);
   if (readResult.status !== 'ok') {
     logger.error(`❌ Failed to read data.json (${readResult.step}): ${readResult.message}`);
     itemIds.forEach((itemId) => failed.push({ id: itemId, reason: 'unknown' }));
-    return { added, failed };
+    return { added, failed, warnings };
   }
 
   let token;
@@ -164,7 +175,7 @@ const importEbayItems = async ({
     logger.error(`❌ OAuth Token Error: ${error.message}`);
     const reason = normalizeFailureReason(error) === 'unknown' ? 'auth-failed' : normalizeFailureReason(error);
     itemIds.forEach((itemId) => failed.push({ id: itemId, reason }));
-    return { added, failed };
+    return { added, failed, warnings };
   }
 
   let dataContent = readResult.data;
@@ -214,7 +225,7 @@ const importEbayItems = async ({
     if (writeProblem) {
       logger.error(`❌ Refusing to save invalid data.json: ${writeProblem}`);
       fetchedIds.forEach((itemId) => failed.push({ id: itemId, reason: 'invalid-response' }));
-      return { added, failed };
+      return { added, failed, warnings };
     }
 
     const writeResult = await writeJsonAtomic(dataPath, dataContent, {
@@ -222,15 +233,19 @@ const importEbayItems = async ({
     });
     if (!writeResult.ok) {
       const reason = writeResult.code === 'stale' ? 'stale-content' : 'unknown';
+      cleanupWarnings(writeResult, false);
       logger.error(`❌ Failed to save data.json: ${writeResult.message}`);
+      warnings.forEach((warning) => logger.error(`⚠️ ${warning}`));
       fetchedIds.forEach((itemId) => failed.push({ id: itemId, reason }));
-      return { added, failed };
+      return { added, failed, warnings };
     }
+    cleanupWarnings(writeResult, true);
+    warnings.forEach((warning) => logger.warn?.(`⚠️ ${warning}`));
     // Report an ID as added only after its data was committed to data.json.
     added.push(...fetchedIds);
   }
 
-  return { added, failed };
+  return { added, failed, warnings };
 };
 
 module.exports = {

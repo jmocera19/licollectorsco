@@ -165,15 +165,34 @@ const acquireFileLock = async (filePath, {
       return {
         ok: true,
         path: lockPath,
-        release() {
+        async release() {
           const owner = readLockOwner(lockPath);
-          if (!owner || owner.token !== token) return false;
-          try {
-            fs.rmSync(lockPath, { recursive: true, force: true });
-            return true;
-          } catch (error) {
-            return false;
+          if (!owner || owner.token !== token) {
+            return {
+              ok: false,
+              code: 'lock-not-owned',
+              message: 'The lock is no longer owned by this operation; it was left in place.',
+              path: lockPath,
+            };
           }
+
+          let lastError;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              fs.rmSync(lockPath, { recursive: true, force: true });
+              return { ok: true };
+            } catch (error) {
+              lastError = error;
+              if (attempt < 2) await sleep(10);
+            }
+          }
+
+          return {
+            ok: false,
+            code: 'cleanup-failed',
+            message: lastError.message,
+            path: lockPath,
+          };
         },
       };
     } catch (error) {
@@ -234,53 +253,87 @@ const readPostsFile = (filePath) => {
 // same-volume rename (Windows: MoveFileEx REPLACE_EXISTING). Coordination uses
 // a per-file lock so fingerprint comparison and replacement are one critical
 // section across Manager and CLI processes. On failure only this operation's
-// own temp file is removed and the destination is untouched.
+// own temp file is removed and the destination is untouched. Cleanup failures
+// are attached to the result so callers can report "saved, cleanup required".
+const cleanupTempFile = async (temporaryPath) => {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if (!fs.existsSync(temporaryPath)) return { ok: true };
+      fs.unlinkSync(temporaryPath);
+      return { ok: true };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await sleep(10);
+    }
+  }
+  return {
+    ok: false,
+    code: 'cleanup-failed',
+    message: lastError.message,
+    path: temporaryPath,
+  };
+};
+
+const writeWithoutLock = async (filePath, value, { expectedFingerprint } = {}) => {
+  if (expectedFingerprint !== undefined) {
+    let current;
+    try {
+      current = fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+      return {
+        ok: false,
+        code: error.code === 'ENOENT' ? 'missing' : 'read-failed',
+        message: error.message,
+      };
+    }
+    if (fingerprint(current) !== expectedFingerprint) {
+      return {
+        ok: false,
+        code: 'stale',
+        message: 'The file changed after it was read. Reload the content and retry.',
+      };
+    }
+  }
+
+  const temporaryPath = path.join(
+    path.dirname(filePath),
+    `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
+  );
+  try {
+    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
+    fs.renameSync(temporaryPath, filePath);
+    return { ok: true };
+  } catch (error) {
+    const tempCleanup = await cleanupTempFile(temporaryPath);
+    return {
+      ok: false,
+      message: error.message,
+      code: error.code,
+      ...(tempCleanup.ok ? {} : { tempCleanup }),
+    };
+  }
+};
+
 const writeJsonAtomic = async (filePath, value, { expectedFingerprint, lockTimeoutMs } = {}) => {
   const lock = await acquireFileLock(filePath, { timeoutMs: lockTimeoutMs });
   if (!lock.ok) {
     return { ok: false, code: lock.code, message: lock.message, owner: lock.owner };
   }
 
+  let result;
   try {
-    if (expectedFingerprint !== undefined) {
-      let current;
-      try {
-        current = fs.readFileSync(filePath, 'utf8');
-      } catch (error) {
-        return {
-          ok: false,
-          code: error.code === 'ENOENT' ? 'missing' : 'read-failed',
-          message: error.message,
-        };
-      }
-      if (fingerprint(current) !== expectedFingerprint) {
-        return {
-          ok: false,
-          code: 'stale',
-          message: 'The file changed after it was read. Reload the content and retry.',
-        };
-      }
-    }
-
-    const temporaryPath = path.join(
-      path.dirname(filePath),
-      `${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`,
-    );
-    try {
-      fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
-      fs.renameSync(temporaryPath, filePath);
-      return { ok: true };
-    } catch (error) {
-      try {
-        fs.unlinkSync(temporaryPath);
-      } catch (cleanupError) {
-        /* only the operation's own temp file is targeted */
-      }
-      return { ok: false, message: error.message, code: error.code };
-    }
+    result = await writeWithoutLock(filePath, value, { expectedFingerprint });
+  } catch (error) {
+    result = { ok: false, message: error.message, code: error.code };
   } finally {
-    lock.release();
+    const cleanup = await lock.release();
+    if (!cleanup.ok) {
+      result = { ...result, cleanup };
+    }
   }
+
+  return result;
 };
 
 const upsertVaultItem = (data, item) => {

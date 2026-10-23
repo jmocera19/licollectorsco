@@ -21,5 +21,5 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 } finally {
-  lock.release();
+  await lock.release();
 }

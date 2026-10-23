@@ -8,7 +8,12 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { lockPathFor, readJsonFile, writeJsonAtomic } = require('../shared/content.cjs');
+const {
+  acquireFileLock,
+  lockPathFor,
+  readJsonFile,
+  writeJsonAtomic,
+} = require('../shared/content.cjs');
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const raceChild = path.join(projectRoot, 'tests', 'helpers', 'write-race-child.mjs');
@@ -129,4 +134,131 @@ test('a failed replacement releases its lock and temp file', async (t) => {
   assert.equal(result.ok, false);
   assert.equal(fs.existsSync(lockPathFor(target)), false);
   assert.deepEqual(fs.readdirSync(directory), ['destination']);
+});
+
+test('transient lock cleanup failures are retried', async (t) => {
+  const { filePath } = makeDataFile(t);
+  const original = fs.rmSync;
+  let attempts = 0;
+
+  fs.rmSync = function (target, options) {
+    if (target === lockPathFor(filePath) && attempts++ === 0) {
+      const error = new Error('Injected busy lock');
+      error.code = 'EBUSY';
+      throw error;
+    }
+    return original.call(fs, target, options);
+  };
+
+  try {
+    const result = await writeJsonAtomic(filePath, { value: 1 });
+    assert.equal(result.ok, true);
+    assert.equal(result.cleanup, undefined);
+  } finally {
+    fs.rmSync = original;
+  }
+
+  assert.equal(fs.existsSync(lockPathFor(filePath)), false);
+});
+
+test('persistent lock cleanup failure is reported as saved with cleanup required', async (t) => {
+  const { filePath } = makeDataFile(t);
+  const original = fs.rmSync;
+
+  fs.rmSync = function (target, options) {
+    if (target === lockPathFor(filePath)) {
+      const error = new Error('Injected busy lock');
+      error.code = 'EBUSY';
+      throw error;
+    }
+    return original.call(fs, target, options);
+  };
+
+  try {
+    const result = await writeJsonAtomic(filePath, { value: 1 });
+    assert.equal(result.ok, true);
+    assert.equal(result.cleanup.code, 'cleanup-failed');
+    assert.match(result.cleanup.message, /Injected busy lock/);
+  } finally {
+    fs.rmSync = original;
+  }
+
+  assert.equal(fs.existsSync(lockPathFor(filePath)), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(filePath, 'utf8')), { value: 1 });
+});
+
+test('temporary-file cleanup failure is attached to the write result', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lico-lock-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const target = path.join(directory, 'destination');
+  fs.mkdirSync(target);
+
+  const original = fs.unlinkSync;
+  fs.unlinkSync = function (targetPath) {
+    if (String(targetPath).endsWith('.tmp')) {
+      const error = new Error('Injected busy temp file');
+      error.code = 'EBUSY';
+      throw error;
+    }
+    return original.call(fs, targetPath);
+  };
+
+  try {
+    const result = await writeJsonAtomic(target, { value: 1 });
+    assert.equal(result.ok, false);
+    assert.equal(result.tempCleanup.code, 'cleanup-failed');
+  } finally {
+    fs.unlinkSync = original;
+  }
+
+  const temporaryFiles = fs.readdirSync(directory).filter((entry) => entry.endsWith('.tmp'));
+  assert.equal(temporaryFiles.length, 1);
+});
+
+test('a failed write reports both its error and cleanup failure', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lico-lock-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const target = path.join(directory, 'destination');
+  fs.mkdirSync(target);
+
+  const original = fs.rmSync;
+  fs.rmSync = function (targetPath, options) {
+    if (targetPath === lockPathFor(target)) {
+      const error = new Error('Injected busy lock');
+      error.code = 'EBUSY';
+      throw error;
+    }
+    return original.call(fs, targetPath, options);
+  };
+
+  try {
+    const result = await writeJsonAtomic(target, { value: 1 });
+    assert.equal(result.ok, false);
+    assert.ok(result.message);
+    assert.equal(result.cleanup.code, 'cleanup-failed');
+  } finally {
+    fs.rmSync = original;
+  }
+});
+
+test('a lock owned by another operation is not removed', async (t) => {
+  const { directory, filePath } = makeDataFile(t);
+  const lock = await acquireFileLock(filePath);
+  assert.equal(lock.ok, true);
+
+  const ownerPath = path.join(lockPathFor(filePath), 'owner.json');
+  fs.writeFileSync(ownerPath, JSON.stringify({
+    token: 'another-operation',
+    pid: 999999,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }), 'utf8');
+
+  const released = await lock.release();
+
+  assert.equal(released.ok, false);
+  assert.equal(released.code, 'lock-not-owned');
+  assert.equal(fs.existsSync(lockPathFor(filePath)), true);
+
+  fs.rmSync(lockPathFor(filePath), { recursive: true, force: true });
+  assert.deepEqual(fs.readdirSync(directory), ['data.json']);
 });

@@ -11,12 +11,13 @@ const dataPath = path.resolve(__dirname, '../src/data.json');
 
 let added = [];
 let failed = [];
+let warnings = [];
 
 // Machine-readable summary emitted exactly once on every normal terminal path.
 // A forced timeout or abnormal crash may skip it; callers must fall back to
 // process metadata and capped output when the line is absent.
 const emitSummary = () => {
-  console.log(`${VAULT_RESULT_PREFIX}${JSON.stringify({ added, failed })}`);
+  console.log(`${VAULT_RESULT_PREFIX}${JSON.stringify({ added, failed, warnings })}`);
 };
 
 // Manual environment variables parser to avoid third-party dependencies
@@ -60,6 +61,9 @@ async function run() {
   });
   added = result.added;
   failed = result.failed;
+  warnings = result.warnings;
+
+  warnings.forEach((warning) => console.warn(`\n⚠️  ${warning}`));
 
   if (fs.existsSync(dataPath)) {
     const stats = fs.statSync(dataPath);
@@ -70,6 +74,8 @@ async function run() {
 
   if (failed.length > 0) {
     console.error("\n❌ Batch sync encountered errors.");
+  } else if (warnings.length > 0) {
+    console.warn("\n⚠️  Batch saved with cleanup warnings.");
   } else {
     console.log('\n--- BATCH SYNC SUCCESS! ---');
     console.log('✅ src/data.json is rewritten with fresh logic constraints.');

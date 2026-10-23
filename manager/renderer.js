@@ -167,9 +167,11 @@ const handleRemove = async (id, title) => {
   if (!window.confirm(`Remove "${title}" (eBay item ID ${id}) from the vault?`)) return;
   const attempt = await window.api.removeVaultItem(id);
   if (attempt.success) {
+    if (attempt.warning) alert(attempt.warning);
     refreshVaultData();
   } else {
     alert(`Delete failed: ${attempt.message || attempt.error || 'Unknown error.'}`);
+    (attempt.warnings || []).forEach((warning) => console.warn(warning));
     if (attempt.error === 'not-found') refreshVaultData();
   }
 };
@@ -190,11 +192,18 @@ addBtn.addEventListener('click', async () => {
     const res = await window.api.addVaultItem(idValue);
 
     if (res.success) {
-      addStatusController.show(res.item && res.item.title ? `Imported "${res.item.title}".` : "Successfully imported!", 'text-green-500', true);
+      const warnings = res.warnings || [];
+      const message = res.item && res.item.title ? `Imported "${res.item.title}".` : "Successfully imported!";
+      addStatusController.show(
+        warnings.length ? `${message} ${warnings.join(' ')}` : message,
+        warnings.length ? 'text-yellow-500' : 'text-green-500',
+        warnings.length === 0,
+      );
       ebayInput.value = '';
       refreshVaultData();
     } else {
       addStatusController.show(res.message || "Import failed. See Console.", 'text-red-500');
+      (res.warnings || []).forEach((warning) => console.warn(warning));
       console.error("Import Error:", res.error, res.reason, res.detail);
     }
   } catch (error) {
@@ -332,13 +341,19 @@ blogPublishBtn.addEventListener('click', async () => {
     }
 
     if (res.status === 'published') {
-      blogStatusController.show(res.created ? '✅ Post published!' : '✅ Post replaced. Original publication date kept.', 'text-green-400', true);
+      const message = res.created ? '✅ Post published!' : '✅ Post replaced. Original publication date kept.';
+      blogStatusController.show(
+        res.warning ? `${message} ${res.warning}` : message,
+        res.warning ? 'text-yellow-400' : 'text-green-400',
+        !res.warning,
+      );
       clearBlogForm();
       refreshBlogPosts();
     } else if (res.status === 'invalid') {
       blogStatusController.show(`Error: ${(res.errors && res.errors.join(' ')) || res.message || 'The post could not be validated.'}`, 'text-red-400');
     } else if (res.status === 'error') {
       blogStatusController.show(`Error: ${res.message || 'Publishing failed.'}`, 'text-red-400');
+      (res.warnings || []).forEach((warning) => console.warn(warning));
       console.error('Publish Error:', res);
     } else {
       blogStatusController.show('Unexpected result. See console.', 'text-red-400');
@@ -404,12 +419,14 @@ const handleDeletePost = async (slug, title) => {
   if (!window.confirm(`Delete "${title}" (/blog/${slug})? This cannot be undone.`)) return;
   const res = await window.api.deletePost(slug);
   if (res.status === 'deleted') {
+    if (res.warning) alert(res.warning);
     refreshBlogPosts();
   } else if (res.status === 'not-found') {
     alert(res.message || 'That post no longer exists.');
     refreshBlogPosts();
   } else {
     alert(`Delete failed: ${res.message || 'Unknown error.'}`);
+    (res.warnings || []).forEach((warning) => console.warn(warning));
   }
 };
 
