@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { SITE_URL as domain } from '../shared/seo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const domain = 'https://licollectorsco.com';
 const postsPath = path.resolve(__dirname, '../src/posts.json');
 const sitemapPath = path.resolve(__dirname, '../public/sitemap.xml');
 

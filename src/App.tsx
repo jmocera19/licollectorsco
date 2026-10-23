@@ -10,39 +10,16 @@ import BlogPost from './pages/BlogPost';
 import Seo from './components/Seo';
 import { motion, useScroll, useSpring } from 'framer-motion';
 import { initGA, useAnalytics } from './utils/useAnalytics';
+import { homeSeo } from '../shared/seo.js';
 
 // Initialize the GA layer once at root
 initGA();
 
-const storeStructuredData = {
-  '@context': 'https://schema.org',
-  '@type': 'Store',
-  name: 'Long Island Collectors Co.',
-  description: 'Buy and sell graded Pokémon cards, Funko Pops, and collectible collections with a Long Island specialist.',
-  url: 'https://licollectorsco.com/',
-  image: 'https://licollectorsco.com/og_preview.jpg',
-  email: 'info@licollectorsco.com',
-  priceRange: '$$',
-  areaServed: {
-    '@type': 'Place',
-    name: 'Long Island, New York',
-  },
-  sameAs: [
-    'https://www.ebay.com/usr/longislandcollectorsco',
-    'https://www.instagram.com/licollectorsco',
-    'https://www.tiktok.com/@licollectorsco',
-    'https://www.youtube.com/@LongIslandCollectorsCo',
-  ],
-};
+const HOME_SEO = homeSeo();
 
 const HomePage = () => (
   <>
-    <Seo
-      title="Long Island Collectors Co. | We Buy & Sell Pokémon & Funko"
-      description="Buy or sell graded Pokémon cards, Funko Pops, and collectible collections with a trusted Long Island specialist. Request a fast, fair quote."
-      path="/"
-      structuredData={storeStructuredData}
-    />
+    <Seo seo={HOME_SEO} />
     <main className="space-y-4">
       <Hero />
       <SellCollection />

@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import postsData from '../posts.json';
 import Seo from '../components/Seo';
+import { articleSeo, notFoundSeo } from '../../shared/seo.js';
 
 interface Post {
   id: string;
@@ -17,16 +19,12 @@ interface Post {
 const BlogPost = () => {
   const { slug } = useParams<{ slug: string }>();
   const post = (postsData.posts as Post[]).find(p => p.slug === slug);
+  const seo = useMemo(() => (post ? articleSeo(post) : notFoundSeo(slug)), [post, slug]);
 
   if (!post) {
     return (
       <section className="min-h-screen bg-navy flex flex-col items-center justify-center text-center px-4">
-        <Seo
-          title="Post Not Found | Long Island Collectors Co."
-          description="The requested article could not be found."
-          path={`/blog/${slug ?? ''}`}
-          noIndex
-        />
+        <Seo seo={seo} />
         <h1 className="text-4xl font-bold text-white mb-4">Post Not Found</h1>
         <p className="text-gray-400 mb-8">The post you're looking for doesn't exist or may have been removed.</p>
         <Link to="/blog" className="px-8 py-3 bg-gold text-navy font-bold rounded shadow-gold-glow hover:bg-yellow-500 transition-colors uppercase tracking-wide">
@@ -42,42 +40,9 @@ const BlogPost = () => {
     day: 'numeric'
   });
 
-  const canonicalPath = `/blog/${post.slug}`;
-  const articleStructuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'BlogPosting',
-    headline: post.title,
-    description: post.excerpt,
-    datePublished: post.date,
-    dateModified: post.date,
-    mainEntityOfPage: `https://licollectorsco.com${canonicalPath}`,
-    image: 'https://licollectorsco.com/og_preview.jpg',
-    author: {
-      '@type': 'Organization',
-      name: 'Long Island Collectors Co.',
-      url: 'https://licollectorsco.com/',
-    },
-    publisher: {
-      '@type': 'Organization',
-      name: 'Long Island Collectors Co.',
-      url: 'https://licollectorsco.com/',
-      logo: {
-        '@type': 'ImageObject',
-        url: 'https://licollectorsco.com/og_preview.jpg',
-      },
-    },
-  };
-
   return (
     <section className="min-h-screen bg-navy py-24 px-4">
-      <Seo
-        title={`${post.title} | LI Collectors Co.`}
-        description={post.excerpt}
-        path={canonicalPath}
-        type="article"
-        publishedTime={post.date}
-        structuredData={articleStructuredData}
-      />
+      <Seo seo={seo} />
 
       <div className="max-w-3xl mx-auto">
         {/* Back link */}

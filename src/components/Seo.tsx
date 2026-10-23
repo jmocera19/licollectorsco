@@ -1,19 +1,5 @@
 import { useLayoutEffect } from 'react';
-
-const SITE_URL = 'https://licollectorsco.com';
-const DEFAULT_IMAGE = `${SITE_URL}/og_preview.jpg`;
-
-type StructuredData = Record<string, unknown>;
-
-interface SeoProps {
-  title: string;
-  description: string;
-  path: string;
-  type?: 'website' | 'article';
-  publishedTime?: string;
-  noIndex?: boolean;
-  structuredData?: StructuredData;
-}
+import { DEFAULT_IMAGE, type SeoData } from '../../shared/seo.js';
 
 const ensureMeta = (key: string, attribute: 'name' | 'property', value: string) => {
   let element = document.head.querySelector<HTMLMetaElement>(`meta[data-seo="${key}"]`);
@@ -45,21 +31,16 @@ const setMeta = (
   ensureMeta(key, attribute, value).content = content;
 };
 
-const normalizePath = (path: string) => {
-  if (!path || path === '/') return '/';
-  return path.startsWith('/') ? path : `/${path}`;
-};
-
-const Seo = ({
-  title,
-  description,
-  path,
-  type = 'website',
-  publishedTime,
-  noIndex = false,
-  structuredData,
-}: SeoProps) => {
-  const canonicalUrl = `${SITE_URL}${normalizePath(path)}`;
+const Seo = ({ seo }: { seo: SeoData }) => {
+  const {
+    title,
+    description,
+    canonicalUrl,
+    type,
+    publishedTime,
+    noIndex = false,
+    structuredData,
+  } = seo;
 
   useLayoutEffect(() => {
     document.title = title;

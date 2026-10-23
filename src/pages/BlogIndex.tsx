@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import postsData from '../posts.json';
 import Seo from '../components/Seo';
+import { blogSeo } from '../../shared/seo.js';
 
 interface Post {
   id: string;
@@ -13,38 +14,15 @@ interface Post {
   body: string;
 }
 
+const posts: Post[] = [...postsData.posts].sort(
+  (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+);
+const BLOG_SEO = blogSeo(posts);
+
 const BlogIndex = () => {
-  const posts: Post[] = [...postsData.posts].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-
-  const blogStructuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'Blog',
-    name: "The Collector's Blog",
-    description: 'Pokémon card grading guides, market analysis, and collecting news from Long Island Collectors Co.',
-    url: 'https://licollectorsco.com/blog',
-    publisher: {
-      '@type': 'Organization',
-      name: 'Long Island Collectors Co.',
-      url: 'https://licollectorsco.com/',
-    },
-    blogPost: posts.map(post => ({
-      '@type': 'BlogPosting',
-      headline: post.title,
-      url: `https://licollectorsco.com/blog/${post.slug}`,
-      datePublished: post.date,
-    })),
-  };
-
   return (
     <section className="min-h-screen bg-navy py-24 px-4">
-      <Seo
-        title="Pokémon Card Grading & Market Guides | Long Island Collectors Co."
-        description="Read Pokémon card grading guides, collector strategies, market analysis, and hobby news from Long Island Collectors Co."
-        path="/blog"
-        structuredData={blogStructuredData}
-      />
+      <Seo seo={BLOG_SEO} />
 
       <div className="max-w-4xl mx-auto">
         <motion.div

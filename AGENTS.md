@@ -5,9 +5,9 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
 
 ## Commands
 
-- `npm run build` is the verification step: `tsc -b` (typecheck) → `vite build` → prerender
-  blog SEO pages. There is no standalone typecheck or test script and no CI. Use
-  `npm run build` to verify any changes.
+- `npm run build` is the primary verification step: `tsc -b` (typecheck) → `vite build` →
+  prerender blog SEO pages. There is no CI. Use `npm run build` plus `npm test` to verify
+  changes. `npm test` runs the Node behavior tests in `tests/`.
 - `prebuild` auto-runs `generate:sitemap`, which regenerates `public/sitemap.xml` from
   `src/posts.json` — never hand-edit the sitemap.
 - `npm run lint` — ESLint over `**/*.{ts,tsx}` only; manager and script JavaScript files
@@ -20,6 +20,10 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
 - `src/posts.json` is the single source of blog content (markdown in `body`, rendered by
   `src/pages/BlogPost.tsx` via react-markdown). New posts need no code changes — build
   scripts pick them up automatically.
+- `shared/seo.js` is the single source of titles, canonical URLs, social tags, and JSON-LD.
+  The browser (`src/components/Seo.tsx`) and build scripts (`scripts/prerender-pages.js`,
+  `scripts/generate-sitemap.js`) both import it. Change metadata there, not in page
+  components or `index.html`; `tests/seo.test.js` checks the static home block against it.
 - `src/data.json` holds site content:
   - `vault` — eBay "vault" items (rendered by `src/components/Vault.tsx`)
   - `livestream` — the `isLive` flag, platform, and stream URL (used by
@@ -31,8 +35,8 @@ TypeScript + Tailwind SPA deployed to Cloudflare Pages. Node 22 (see `.nvmrc`).
 - `scripts/prerender-pages.js` string-replaces the `<!-- SEO:START -->…<!-- SEO:END -->`
   block in `index.html` to write static `index.html` files for `/blog` and every post
   slug. The build FAILS if the markers are missing — do not remove them.
-- `src/components/Seo.tsx` updates the same `data-seo`-tagged head elements client-side;
-  keep it in sync with the prerender script's block.
+- `src/components/Seo.tsx` applies the same shared metadata to the `data-seo`-tagged head
+  elements client-side; `shared/seo.js` is the source both it and the prerender script use.
 - Google Analytics (GA4) is initialized at app root via `src/utils/useAnalytics.ts`
   (`react-ga4`). The measurement ID comes from `VITE_GA_MEASUREMENT_ID` (set in local
   `.env` or the Cloudflare Pages environment). Page views track route changes; eBay
